@@ -108,7 +108,7 @@ init-model:
 # 启动完整的 RAG 服务
 start:
 	@echo "启动完整的RAG服务..."
-	bash start_rag_agent.sh
+	bash scripts/start_rag_agent.sh
 
 # 重置向量数据库
 reset-db:

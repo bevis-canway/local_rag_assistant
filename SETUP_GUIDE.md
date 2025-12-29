@@ -122,6 +122,11 @@ uv run python rag_agent/main.py
 make dev
 ```
 
+### 方法4：使用启动脚本
+```bash
+bash scripts/start_rag_agent.sh
+```
+
 ## 配置小魔仙模型
 
 ### 使用预设命令配置小魔仙模型
@@ -143,6 +148,14 @@ uv run python -c "import ollama; ollama.embeddings(model='bge-m3:latest', prompt
   - [retriever.py](./rag_agent/retriever.py) - 检索器
   - [prompt_engineer.py](./rag_agent/prompt_engineer.py) - 提示工程
   - [main.py](./rag_agent/main.py) - 主程序
+
+- [tests/](./tests/) - 测试套件
+  - [test_connection.py](./tests/test_connection.py) - 连接测试
+  - [test_demo.py](./tests/test_demo.py) - 演示测试
+  - [test_embeddings.py](./tests/test_embeddings.py) - 嵌入测试
+
+- [scripts/](./scripts/) - 脚本文件
+  - [start_rag_agent.sh](./scripts/start_rag_agent.sh) - 启动脚本
 
 - [Makefile](./Makefile) - 自动化构建工具
 - [pyproject.toml](./pyproject.toml) - 项目依赖和配置
