@@ -164,3 +164,6 @@ test_vector_store/
 # 临时文件
 *.tmp
 *.temp
+
+# 模型缓存目录
+model_cache/
