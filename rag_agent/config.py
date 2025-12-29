@@ -34,5 +34,8 @@ class Config(BaseModel):
     # 检索配置
     TOP_K: int = int(os.getenv("TOP_K", "5"))
 
+    # 相似度阈值配置
+    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.3"))
+
     class Config:
         env_file = ".env"

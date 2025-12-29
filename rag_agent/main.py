@@ -15,6 +15,7 @@ import tiktoken
 from rag_agent.config import Config
 from rag_agent.obsidian_connector import ObsidianConnector
 from rag_agent.prompt_engineer import PromptEngineer
+from rag_agent.prompts.prompt_templates import RAG_PROMPT_TEMPLATES
 from rag_agent.retriever import Retriever
 from rag_agent.vector_store import VectorStore
 
@@ -52,7 +53,13 @@ class RAGAgent:
             os.environ.setdefault("EMBEDDING_MODEL", config.EMBEDDING_MODEL)
 
         self.vector_store = VectorStore(persist_path=config.VECTOR_DB_PATH)
-        self.retriever = Retriever(self.vector_store, top_k=config.TOP_K)
+        # 使用可配置的相似度阈值，默认为0.3
+        similarity_threshold = getattr(config, "SIMILARITY_THRESHOLD", 0.3)
+        self.retriever = Retriever(
+            self.vector_store,
+            top_k=config.TOP_K,
+            similarity_threshold=similarity_threshold,
+        )
         self.prompt_engineer = PromptEngineer()
 
         # 初始化分词器用于计算token
@@ -189,11 +196,17 @@ class RAGAgent:
         """
         logger.info(f"处理查询: {user_question}")
 
-        # 1. 检索相关文档
-        context = self.retriever.retrieve_and_format(user_question)
+        # 1. 检索相关文档并判断是否有相关文档
+        filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(user_question)
 
-        # 2. 构建提示词
-        prompt = self.prompt_engineer.build_rag_prompt(user_question, context)
+        if has_relevant_docs:
+            # 如果有相关文档，格式化并使用RAG提示词
+            context = self.retriever.format_results(filtered_results)
+            prompt = self.prompt_engineer.build_rag_prompt(user_question, context)
+        else:
+            # 如果没有相关文档，使用无文档提示词
+            logger.info("未找到相关文档，使用通用模型回答")
+            prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
 
         # 3. 调用Ollama模型
         try:
