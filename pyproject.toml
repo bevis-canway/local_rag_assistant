@@ -18,3 +18,33 @@ dependencies = [
     "tiktoken==0.5.2",
     "uvicorn==0.24.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.4",
+    "ruff==0.9.10",
+]
+
+[tool.ruff]
+# 允许的行长度
+line-length = 88
+# 选择要启用的检查
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+# 忽略的检查
+ignore = [
+    "E501",  # line too long (handled by black)
+]
+
+[tool.ruff.format]
+# 与 Black 兼容的格式化设置
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+skip-magic-trailing-comma = false
