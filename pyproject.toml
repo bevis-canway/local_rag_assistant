@@ -28,6 +28,8 @@ dev = [
 [tool.ruff]
 # 允许的行长度
 line-length = 88
+
+[tool.ruff.lint]
 # 选择要启用的检查
 select = [
     "E",  # pycodestyle errors
@@ -40,6 +42,7 @@ select = [
 # 忽略的检查
 ignore = [
     "E501",  # line too long (handled by black)
+    "E402",  # module level import not at top of file (有些情况是必需的，如sys.path修改)
 ]
 
 [tool.ruff.format]

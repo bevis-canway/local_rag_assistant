@@ -16,6 +16,7 @@ help:
 	@echo "  make dev              启动开发模式（热重载）"
 	@echo "  make test             运行测试套件"
 	@echo "  make lint             代码质量检查"
+	@echo "  make lint-strict      严格代码质量检查"
 	@echo "  make format           格式化代码"
 	@echo "  make clean            清理构建产物和缓存"
 	@echo "  make purge            完全清理（包括虚拟环境）"
@@ -55,16 +56,21 @@ test:
 	@echo "运行测试套件..."
 	uv run python -m pytest tests/ -v
 
-# 代码质量检查
+# 代码质量检查（忽略导入顺序问题，因为有些是必需的）
 lint:
-	@echo "执行代码质量检查..."
+	@echo "执行代码质量检查（忽略导入顺序问题）..."
+	uv run ruff check . --ignore E402
+
+# 严格代码质量检查
+lint-strict:
+	@echo "执行严格代码质量检查..."
 	uv run ruff check .
 
 # 格式化代码
 format:
 	@echo "格式化代码..."
 	uv run ruff format .
-	uv run ruff check . --fix
+	uv run ruff check . --fix --ignore E402
 
 # 清理构建产物和缓存
 clean:
@@ -88,7 +94,7 @@ purge: clean
 check:
 	@echo "检查依赖安全和兼容性..."
 	uv sync
-	uv run ruff check .
+	uv run ruff check . --ignore E402
 	uv run python -m pip check
 	@echo "检查完成！"
 
