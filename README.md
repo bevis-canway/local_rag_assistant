@@ -13,6 +13,7 @@
 - **现代化依赖管理**：使用 uv 替代传统 pip，提供更快的依赖解析和安装
 - **自动化构建工具**：集成 Makefile，提供一键式开发体验
 - **代码质量保障**：集成 Ruff 进行代码格式化和质量检查
+- **提示词管理**：统一管理所有提示词模板，提高可维护性
 
 ## 技术栈
 
@@ -95,7 +96,10 @@ local_rag_assistant/
 │   ├── obsidian_connector.py # Obsidian连接器
 │   ├── prompt_engineer.py # 提示工程
 │   ├── retriever.py       # 检索器
-│   └── vector_store.py    # 向量数据库管理
+│   ├── vector_store.py    # 向量数据库管理
+│   └── prompts/           # 提示词管理
+│       ├── __init__.py
+│       └── prompt_templates.py # 提示词模板
 ├── scripts/               # 脚本文件
 │   └── start_rag_agent.sh # 启动脚本
 ├── tests/                 # 测试套件
@@ -132,6 +136,15 @@ make purge         # 完全清理（包括虚拟环境）
 - 更直接的控制和调试能力
 
 详细技术选型对比请参见 [docs/tech_comparison.md](docs/tech_comparison.md)
+
+## 提示词管理
+
+本项目采用统一的提示词管理机制：
+- 所有提示词模板集中管理在 `rag_agent/prompts/` 目录
+- 按功能分类管理（RAG相关、系统提示词等）
+- 提高可维护性和可扩展性
+
+详细说明请参见 [docs/prompt_management.md](docs/prompt_management.md)
 
 ## 产品路标
 
