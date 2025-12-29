@@ -159,7 +159,6 @@ class RAGAgent:
 
             # 尝试在句子边界分割
             found_boundary = False
-            original_end = end
 
             # 向前搜索句子边界
             while end > start:

@@ -63,7 +63,7 @@ class VectorStore:
                     logger.error(f"无法加载替代模型: {e2}")
                     raise RuntimeError(
                         "无法加载嵌入模型，请检查网络连接或手动下载模型，或者配置OpenAI兼容API"
-                    )
+                    ) from e2
 
     def _get_embeddings(self, texts: List[str]):
         """获取文本嵌入向量"""
@@ -111,7 +111,7 @@ class VectorStore:
                         if "http_client" in locals():
                             try:
                                 http_client.close()
-                            except:
+                            except Exception:
                                 pass
 
                         if attempt < max_retries - 1:
