@@ -1,188 +1,141 @@
-# RAG智能体Demo
+# 小魔仙RAG智能体
 
-基于Obsidian知识库的本地RAG（检索增强生成）智能体Demo。
+基于本地模型的 RAG（检索增强生成）智能体，专门用于处理 Obsidian 笔记知识库。
 
-## 功能特性
+## 项目概述
 
-- 连接本地Obsidian知识库
-- 自动索引笔记内容到向量数据库
-- 基于语义检索的问答系统
-- 本地大模型推理（通过Ollama）
-- 命令行交互界面
+小魔仙RAG智能体是一个现代化的检索增强生成系统，使用 uv 作为依赖管理工具，支持通过 Ollama API 使用本地模型进行嵌入计算。项目已集成完整的自动化构建工具，简化开发和部署流程。
+
+## 核心特性
+
+- **本地模型支持**：优先使用名为'小魔仙'的本地模型（对应 bge-m3:latest）进行嵌入计算
+- **Obsidian 集成**：直接连接 Obsidian 知识库，支持 Markdown 格式
+- **现代化依赖管理**：使用 uv 替代传统 pip，提供更快的依赖解析和安装
+- **自动化构建工具**：集成 Makefile，提供一键式开发体验
+- **代码质量保障**：集成 Ruff 进行代码格式化和质量检查
 
 ## 技术栈
 
-- Python 3.8+
-- FastAPI
-- ChromaDB（向量数据库）
-- Sentence Transformers（中文嵌入）或Ollama嵌入API
-- Ollama（本地大模型）
-- Obsidian API（可选）
+- **语言**: Python 3.11+
+- **依赖管理**: uv
+- **向量数据库**: ChromaDB
+- **嵌入模型**: Ollama (支持 bge-m3:latest 等本地模型)
+- **API框架**: FastAPI
+- **构建工具**: Makefile
+- **代码质量**: Ruff
 
-## 环境准备
+## 快速开始
 
-### 1. 安装Ollama
+### 环境要求
 
-请先安装Ollama并确保服务运行：
+- Python 3.11+
+- Ollama (用于本地模型)
+- uv (现代 Python 包管理器)
 
-```bash
-# macOS
-brew install ollama
+### 安装
 
-# 启动Ollama服务
-ollama serve
-```
+1. **克隆项目**
+   ```bash
+   git clone https://github.com/bevis-canway/local_rag_assistant.git
+   cd local_rag_assistant
+   ```
 
-### 2. 下载模型
+2. **安装 uv (如果尚未安装)**
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
 
-下载一个适合的模型，例如 `deepseek-coder` 或 `llama3`：
+3. **安装项目依赖**
+   ```bash
+   make install
+   ```
 
-```bash
-ollama pull deepseek-coder
-# 或者
-ollama pull llama3
-```
-
-### 3. (推荐) 配置Ollama嵌入模型
-为了避免网络问题无法下载sentence-transformers模型，推荐使用Ollama的嵌入模型：
-
-```bash
-ollama pull nomic-embed-text
-```
-
-### 4. Obsidian配置
-
-如果要使用Obsidian API，需要安装相关插件：
-
-1. 在Obsidian中安装 "MCP: Model Context Protocol" 插件，或
-2. 安装 "REST API" 插件
-
-或者直接指定Vault路径，通过文件系统访问。
-
-## 安装依赖
-
-```bash
-cd /Users/xiejindong/code/canway/bk-aidev-agent/demo
-pip install -r requirements.txt
-```
-
-## 配置
-
-创建 `.env` 文件：
-
-```bash
-cp .env.example .env
-```
-
-编辑 `.env` 文件，设置以下配置：
-
-```env
-# Obsidian配置
-OBSIDIAN_VAULT_PATH=/path/to/your/obsidian/vault
-OBSIDIAN_API_KEY=your_obsidian_api_key_if_using_api
-OBSIDIAN_API_URL=http://localhost:5136
-
-# Ollama配置
-OLLAMA_MODEL=deepseek-coder
-OLLAMA_HOST=http://localhost:11434
-
-# (推荐) 如果使用Ollama嵌入模型
-OLLAMA_API_KEY=your_ollama_api_key_if_needed
-OLLAMA_BASE_URL=http://localhost:11434/v1
-EMBEDDING_MODEL=nomic-embed-text
-
-# 向量数据库配置
-VECTOR_DB_PATH=./vector_store
-
-# 分块配置
-CHUNK_SIZE=1000
-CHUNK_OVERLAP=200
-
-# 检索配置
-TOP_K=5
-```
-
-## 运行
-
-```bash
-cd /Users/xiejindong/code/canway/bk-aidev-agent/demo
-python -m rag_agent.main
-```
-
-## 使用说明
-
-1. 首次运行会自动索引Obsidian笔记
-2. 输入问题后按回车，智能体会检索相关文档并生成回答
-3. 输入 `reindex` 可重新索引笔记
-4. 输入 `quit` 或 `exit` 退出程序
-
-## 项目结构
-
-```
-demo/
-├── rag_agent/           # RAG智能体模块
-│   ├── __init__.py
-│   ├── config.py        # 配置管理
-│   ├── obsidian_connector.py  # Obsidian连接器
-│   ├── vector_store.py  # 向量数据库
-│   ├── retriever.py     # 检索器
-│   ├── prompt_engineer.py  # 提示工程
-│   └── main.py          # 主程序
-├── requirements.txt     # 依赖列表
-├── README.md           # 本文件
-└── .env.example        # 环境变量示例
-```
-
-## 与AIDev项目集成
-
-此Demo参考了AIDev项目中的以下能力：
-- RAG架构设计
-- 向量检索实现
-- 提示工程策略
-- Agent决策机制
-
-## 网络连接问题解决方案
-
-如果遇到网络连接问题（如无法下载sentence-transformers模型），请使用Ollama嵌入模型：
-
-1. 确保Ollama服务正在运行：
+4. **启动 Ollama 服务**
    ```bash
    ollama serve
    ```
 
-2. 下载嵌入模型：
+5. **下载必需的模型**
    ```bash
-   ollama pull nomic-embed-text
+   ollama pull bge-m3:latest
+   ollama pull deepseek-coder
    ```
 
-3. 在.env文件中设置：
-   ```env
-   OLLAMA_API_KEY=dummy_key  # 任意值即可
-   OLLAMA_BASE_URL=http://localhost:11434/v1
-   EMBEDDING_MODEL=nomic-embed-text
+6. **配置环境变量**
+   复制并编辑 `.env` 文件：
+   ```bash
+   cp .env.example .env
+   # 编辑 .env 文件中的配置
    ```
 
-4. 这样就不需要从HuggingFace下载模型，而是使用Ollama的嵌入API。
+### 运行
 
-## 自定义扩展
+1. **使用 Makefile 运行（推荐）**
+   ```bash
+   make run
+   ```
 
-1. **更换嵌入模型**：在 `vector_store.py` 中更换SentenceTransformer模型或配置API模型
-2. **调整检索策略**：在 `retriever.py` 中修改检索逻辑
-3. **优化提示词**：在 `prompt_engineer.py` 中调整提示模板
-4. **添加Web界面**：基于FastAPI构建Web API
+2. **使用启动脚本**
+   ```bash
+   make start
+   ```
 
-## 注意事项
+3. **开发模式**
+   ```bash
+   make dev
+   ```
 
-1. 确保Ollama服务已启动且模型已下载
-2. Obsidian Vault路径需要有读取权限
-3. 向量库文件会存储在指定路径，占用磁盘空间
-4. 首次索引可能需要较长时间，取决于笔记数量
-5. 如果遇到网络问题，强烈建议使用Ollama嵌入模型
+## 项目结构
 
-## 故障排除
+```
+local_rag_assistant/
+├── rag_agent/              # 小魔仙RAG智能体核心模块
+│   ├── config.py          # 配置管理
+│   ├── main.py            # 主程序入口
+│   ├── obsidian_connector.py # Obsidian连接器
+│   ├── prompt_engineer.py # 提示工程
+│   ├── retriever.py       # 检索器
+│   └── vector_store.py    # 向量数据库管理
+├── scripts/               # 脚本文件
+│   └── start_rag_agent.sh # 启动脚本
+├── tests/                 # 测试套件
+├── docs/                  # 文档
+├── Makefile               # 自动化构建工具
+├── pyproject.toml         # 项目依赖和配置
+└── ...
+```
 
-- 如果无法连接Ollama：检查服务是否运行，模型是否已下载
-- 如果无法读取笔记：检查Vault路径和权限设置
-- 如果检索效果不佳：尝试调整嵌入模型或检索参数
-- 如果遇到网络超时：配置Ollama嵌入模型或使用代理
-- 如果出现numpy版本错误：确保使用numpy<2.0版本
+## 自动化构建工具
+
+项目集成了 Makefile，提供便捷的命令行工具：
+
+```bash
+make help          # 查看所有可用命令
+make install       # 安装项目依赖
+make run           # 运行小魔仙RAG智能体服务
+make dev           # 启动开发模式（热重载）
+make test          # 运行测试套件
+make lint          # 代码质量检查
+make format        # 格式化代码
+make reset-db      # 重置向量数据库
+make clean         # 清理构建产物
+make purge         # 完全清理（包括虚拟环境）
+```
+
+## 技术选型说明
+
+本项目选择当前技术栈而非 LangChain 的原因：
+- 更适合本地 RAG 场景，代码更简洁
+- 对本地模型（Ollama）有更好的支持
+- 更轻量级，避免框架开销
+- 更直接的控制和调试能力
+
+详细技术选型对比请参见 [docs/tech_comparison.md](docs/tech_comparison.md)
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request 来改进项目。
+
+## 许可证
+
+[在此处添加许可证信息]
