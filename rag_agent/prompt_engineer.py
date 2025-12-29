@@ -1,13 +1,13 @@
-from typing import List, Dict
-
 class PromptEngineer:
     """
     提示工程模块
     参考aidev项目中的提示词设计，构建用于大模型的提示词
     """
-    
+
     @staticmethod
-    def build_rag_prompt(query: str, context: str, max_context_length: int = 3000) -> str:
+    def build_rag_prompt(
+        query: str, context: str, max_context_length: int = 3000
+    ) -> str:
         """
         构建RAG提示词
         参考aidev项目中的多模态提示词模板
@@ -15,7 +15,7 @@ class PromptEngineer:
         # 如果上下文太长，进行截断
         if len(context) > max_context_length:
             context = context[:max_context_length] + "...(内容已截断)"
-        
+
         prompt = f"""
 你是一名专业的助理，以有用、准确、简洁的方式回应人类。
 
@@ -50,9 +50,9 @@ class PromptEngineer:
 请基于上述文档内容回答用户问题，如果文档中没有相关信息，请明确说明"根据提供的文档内容无法回答此问题"。
 请使用中文回答，保持回答准确、简洁、有条理。
         """.strip()
-        
+
         return prompt
-    
+
     @staticmethod
     def build_summarization_prompt(content: str) -> str:
         """
@@ -64,5 +64,5 @@ class PromptEngineer:
 
 摘要：
         """.strip()
-        
+
         return prompt
