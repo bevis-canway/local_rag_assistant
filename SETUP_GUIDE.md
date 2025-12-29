@@ -1,88 +1,142 @@
-# RAG智能体配置和运行指南
+# 小魔仙RAG智能体配置和运行指南
 
-## 重要更新：解决网络连接问题
+## 项目概述
 
-我们已经更新了RAG智能体，现在支持通过Ollama的API来使用嵌入模型，这样就无需从HuggingFace下载模型，解决了在中国大陆访问HuggingFace的网络问题。
+小魔仙RAG智能体是一个现代化的检索增强生成系统，使用 uv 作为依赖管理工具，支持通过 Ollama API 使用本地模型进行嵌入计算。项目已集成完整的自动化构建工具，简化开发和部署流程。
 
-## 快速配置步骤
+## 环境要求
 
-### 1. 启动Ollama服务
+- Python 3.11+
+- Ollama (用于本地模型)
+- uv (现代 Python 包管理器)
+
+### 安装 uv (如果尚未安装)
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+## 快速开始
+
+### 1. 克隆并初始化项目
+```bash
+git clone https://github.com/bevis-canway/local_rag_assistant.git
+cd local_rag_assistant
+
+# 安装项目依赖
+make install
+```
+
+### 2. 启动Ollama服务
 ```bash
 ollama serve
 ```
 
-### 2. 下载必需的模型
+### 3. 下载必需的模型
 ```bash
-# 下载用于嵌入的模型
-ollama pull nomic-embed-text
+# 下载用于嵌入的模型（推荐使用小魔仙模型）
+ollama pull bge-m3:latest
 
 # 下载用于对话的模型（可选，使用您喜欢的模型）
 ollama pull deepseek-coder
 ```
 
-### 3. 配置环境变量
-确保您的 `.env` 文件包含以下配置：
+### 4. 配置环境变量
+复制并编辑 `.env` 文件：
 ```
-# API嵌入模型配置（关键配置，解决网络问题）
+# 小魔仙模型配置
 OLLAMA_API_KEY=dummy_key
 OLLAMA_BASE_URL=http://localhost:11434/v1
-EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_MODEL=bge-m3:latest
 
-# 其他配置...
+# Obsidian配置
 OBSIDIAN_VAULT_PATH=/path/to/your/obsidian/vault
+OBSIDIAN_API_URL=http://localhost:5136
+OBSIDIAN_API_KEY=your_obsidian_api_key
+
+# Ollama配置
 OLLAMA_MODEL=deepseek-coder
+OLLAMA_HOST=http://localhost:11434
+
+# 向量数据库配置
+VECTOR_DB_PATH=./vector_store
+
+# 其他配置
+CHUNK_SIZE=512
+CHUNK_OVERLAP=50
+TOP_K=5
 ```
 
-## 运行RAG智能体
+## 使用自动化构建工具
 
-### 方法1：使用启动脚本（推荐）
+项目集成了 Makefile，提供便捷的命令行工具：
+
+### 查看所有可用命令
 ```bash
-./start_rag_agent.sh
+make help
 ```
 
-### 方法2：手动运行
+### 主要命令
 ```bash
-cd /Users/xiejindong/code/canway/bk-aidev-agent/demo
-python -m rag_agent.main
+# 安装项目依赖
+make install
+
+# 运行小魔仙RAG智能体服务
+make run
+
+# 启动开发模式（热重载）
+make dev
+
+# 运行测试套件
+make test
+
+# 代码质量检查
+make lint
+
+# 格式化代码
+make format
+
+# 检查依赖安全和兼容性
+make check
+
+# 重置向量数据库
+make reset-db
+
+# 完全清理（包括虚拟环境）
+make purge
 ```
 
-## 故障排除
+## 运行小魔仙RAG智能体
 
-### 1. 如果遇到"Connection error"
-- 确保Ollama服务正在运行：`ollama serve`
-- 确保已下载nomic-embed-text模型：`ollama pull nomic-embed-text`
-
-### 2. 如果仍然尝试下载HuggingFace模型
-- 检查环境变量是否正确设置
-- 确认OLLAMA_API_KEY不为空
-- 重启Python环境使环境变量生效
-
-### 3. 如果Obsidian路径有中文或空格
-- 程序已支持包含中文和空格的路径
-- 确保路径使用绝对路径格式
-
-## 验证配置是否成功
-
-运行以下命令验证API嵌入模型是否被正确使用：
+### 方法1：使用Makefile（推荐）
 ```bash
-python -c "
-import os
-os.environ['OLLAMA_API_KEY']='dummy_key'
-os.environ['OLLAMA_BASE_URL']='http://localhost:11434/v1'
-os.environ['EMBEDDING_MODEL']='nomic-embed-text'
-from rag_agent.main import RAGAgent
-from rag_agent.config import Config
-config = Config()
-agent = RAGAgent(config)
-print('✓ API嵌入模型配置成功:', agent.vector_store.use_api_embeddings)
-"
+make run
 ```
 
-如果输出"✓ API嵌入模型配置成功: True"，说明配置正确。
+### 方法2：使用uv直接运行
+```bash
+uv run python rag_agent/main.py
+```
+
+### 方法3：启动开发模式
+```bash
+make dev
+```
+
+## 配置小魔仙模型
+
+### 使用预设命令配置小魔仙模型
+```bash
+make init-model
+```
+
+### 手动验证小魔仙模型
+```bash
+uv run python -c "import ollama; ollama.embeddings(model='bge-m3:latest', prompt='小魔仙模型测试'); print('小魔仙模型已准备就绪')"
+```
 
 ## 项目架构
 
-- [rag_agent/](./rag_agent/) - RAG智能体核心模块
+- [rag_agent/](./rag_agent/) - 小魔仙RAG智能体核心模块
   - [config.py](./rag_agent/config.py) - 配置管理
   - [obsidian_connector.py](./rag_agent/obsidian_connector.py) - Obsidian连接器
   - [vector_store.py](./rag_agent/vector_store.py) - 向量数据库（支持API嵌入）
@@ -90,11 +144,67 @@ print('✓ API嵌入模型配置成功:', agent.vector_store.use_api_embeddings)
   - [prompt_engineer.py](./rag_agent/prompt_engineer.py) - 提示工程
   - [main.py](./rag_agent/main.py) - 主程序
 
-## 关键改进
+- [Makefile](./Makefile) - 自动化构建工具
+- [pyproject.toml](./pyproject.toml) - 项目依赖和配置
+- [uv.lock](./uv.lock) - 依赖锁定文件
 
-1. **API嵌入支持**：现在支持通过Ollama API获取嵌入向量，无需下载本地模型
-2. **错误处理**：改进了错误处理机制，提供更清晰的错误信息
-3. **文档分割修复**：修复了文档分割中的索引越界问题
-4. **环境变量管理**：确保配置正确传递到各组件
+## 故障排除
 
-现在您可以顺利使用RAG智能体，不再受网络限制影响！
+### 1. 如果遇到"Connection error"
+- 确保Ollama服务正在运行：`ollama serve`
+- 确保已下载bge-m3:latest模型：`ollama pull bge-m3:latest`
+
+### 2. 如果依赖安装失败
+```bash
+# 重新安装依赖
+make install
+
+# 或完全清理后重新安装
+make purge
+make install
+```
+
+### 3. 如果向量数据库出错
+```bash
+# 重置向量数据库
+make reset-db
+```
+
+### 4. 如果环境变量未生效
+```bash
+# 重新同步虚拟环境
+make sync
+```
+
+## 验证配置是否成功
+
+运行以下命令验证小魔仙模型是否被正确配置：
+```bash
+make init-model
+```
+
+或手动验证：
+```bash
+uv run python -c "
+import os
+os.environ['OLLAMA_API_KEY']='dummy_key'
+os.environ['OLLAMA_BASE_URL']='http://localhost:11434/v1'
+os.environ['EMBEDDING_MODEL']='bge-m3:latest'
+from rag_agent.main import RAGAgent
+from rag_agent.config import Config
+config = Config()
+agent = RAGAgent(config)
+print('✓ 小魔仙模型配置成功:', agent.vector_store.use_api_embeddings)
+"
+```
+
+## 关键特性
+
+1. **现代化依赖管理**：使用 uv 替代传统 pip，提供更快的依赖解析和安装
+2. **自动化构建工具**：集成 Makefile，提供一键式开发体验
+3. **小魔仙模型支持**：优化支持 bge-m3:latest 本地模型
+4. **API嵌入支持**：支持通过Ollama API获取嵌入向量，无需下载本地模型
+5. **代码质量保障**：集成 Ruff 进行代码格式化和质量检查
+6. **错误处理**：改进了错误处理机制，提供更清晰的错误信息
+
+现在您可以使用现代化的工具链顺利运行小魔仙RAG智能体！
