@@ -4,6 +4,7 @@ from typing import Dict, List
 
 import ollama
 
+from .prompts.prompt_templates import RAG_PROMPT_TEMPLATES
 from .vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -67,12 +68,8 @@ class Retriever:
             # 从环境变量获取模型名称，默认使用配置的模型
             model_name = os.getenv("OLLAMA_MODEL", "deepseek-coder")
 
-            # 构建提示词，告知模型没有找到相关文档
-            prompt = f"""你是一个智能助手。用户的问题是："{query}"
-
-我没有在本地知识库中找到与您问题相关的内容。
-
-请根据你的通用知识尽力回答用户的问题。如果问题涉及非常具体或专业的内容，而你无法准确回答，请诚实地告知用户你无法提供准确答案，并建议用户查阅相关资料或寻求专业帮助。"""
+            # 使用预定义的提示词模板
+            prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=query)
 
             # 调用 Ollama 模型
             response = ollama.chat(
