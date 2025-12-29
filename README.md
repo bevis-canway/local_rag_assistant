@@ -100,6 +100,7 @@ local_rag_assistant/
 │   └── start_rag_agent.sh # 启动脚本
 ├── tests/                 # 测试套件
 ├── docs/                  # 文档
+├── roadmap/               # 产品路标
 ├── Makefile               # 自动化构建工具
 ├── pyproject.toml         # 项目依赖和配置
 └── ...
@@ -131,6 +132,13 @@ make purge         # 完全清理（包括虚拟环境）
 - 更直接的控制和调试能力
 
 详细技术选型对比请参见 [docs/tech_comparison.md](docs/tech_comparison.md)
+
+## 产品路标
+
+了解项目的发展方向和未来规划：
+- [功能迭代历史](roadmap/feature_iterations.md) - 查看已完成的功能迭代
+- [待办功能列表](roadmap/todo_features.md) - 查看待实现的功能和优化
+- [产品路标总览](roadmap/roadmap_overview.md) - 查看长期发展规划
 
 ## 贡献
 
