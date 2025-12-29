@@ -1,5 +1,5 @@
 # 小魔仙RAG智能体项目自动化构建工具
-.PHONY: help install update sync run dev clean purge check test lint format
+.PHONY: help install update sync run dev clean purge check test lint format reset-db
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -21,6 +21,7 @@ help:
 	@echo "  make clean            清理构建产物和缓存"
 	@echo "  make purge            完全清理（包括虚拟环境）"
 	@echo "  make check            检查依赖安全和兼容性"
+	@echo "  make reset-db         重置向量数据库"
 	@echo ""
 
 # 安装项目依赖
@@ -108,3 +109,9 @@ init-model:
 start:
 	@echo "启动完整的RAG服务..."
 	bash start_rag_agent.sh
+
+# 重置向量数据库
+reset-db:
+	@echo "重置向量数据库..."
+	rm -rf vector_store/ test_vector_store/
+	@echo "向量数据库已重置！"

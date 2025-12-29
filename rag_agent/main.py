@@ -5,17 +5,18 @@ from pathlib import Path
 from typing import List
 
 # 添加项目根目录到Python路径
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import ollama
 import tiktoken
 
-from .config import Config
-from .obsidian_connector import ObsidianConnector
-from .prompt_engineer import PromptEngineer
-from .retriever import Retriever
-from .vector_store import VectorStore
+# 使用绝对导入替代相对导入
+from rag_agent.config import Config
+from rag_agent.obsidian_connector import ObsidianConnector
+from rag_agent.prompt_engineer import PromptEngineer
+from rag_agent.retriever import Retriever
+from rag_agent.vector_store import VectorStore
 
 # 配置日志
 logging.basicConfig(
