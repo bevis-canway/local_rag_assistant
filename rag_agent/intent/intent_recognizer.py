@@ -89,12 +89,19 @@ class IntentRecognizer:
         )
 
         # 5. 检查置信度并决定是否需要澄清
-        final_confidence = structured_result.get("confidence", classification_result.get("confidence", 0.5))
+        # 对于知识查询，降低澄清阈值，因为这类查询通常不需要澄清
+        base_confidence = structured_result.get("confidence", classification_result.get("confidence", 0.5))
+        
+        # 如果是知识查询，置信度阈值降低到0.6，因为这类查询通常比较明确
+        if classification_result["intent"] == "knowledge_query":
+            clarification_threshold = 0.6
+        else:
+            clarification_threshold = 0.7
 
-        if final_confidence < 0.7 and classification_result["intent"] != "chitchat":
+        if base_confidence < clarification_threshold and classification_result["intent"] != "chitchat":
             return IntentResult(
                 intent_type="ambiguous",
-                confidence=final_confidence,
+                confidence=base_confidence,
                 entity=structured_result.get("entity", ""),
                 aspect=structured_result.get("aspect", ""),
                 original_query=classification_result["original_query"],
@@ -104,7 +111,7 @@ class IntentRecognizer:
 
         return IntentResult(
             intent_type=classification_result["intent"],
-            confidence=final_confidence,
+            confidence=base_confidence,
             entity=structured_result.get("entity", ""),
             aspect=structured_result.get("aspect", ""),
             original_query=classification_result["original_query"],
@@ -184,8 +191,15 @@ class IntentRecognizer:
 
         # 知识查询关键词
         knowledge_keywords = ["什么是", "怎么", "如何", "为什么", "什么", "哪个", "哪个是", "介绍", "解释", "说明",
-                              "定义", "概念", "了解", "查询", "搜索", "查找"]
+                              "定义", "概念", "了解", "查询", "搜索", "查找", "人才偏好", "公司", "企业"]
         if any(keyword in query_lower for keyword in knowledge_keywords):
+            # 特别处理包含"公司"和"人才偏好"的查询，这通常是明确的知识查询
+            if "公司" in query_lower and "人才偏好" in query_lower:
+                return {
+                    "intent": "knowledge_query",
+                    "confidence": 0.9,
+                    "reason": "匹配到公司人才偏好查询关键词"
+                }
             return {
                 "intent": "knowledge_query",
                 "confidence": 0.85,
@@ -427,12 +441,13 @@ class IntentRecognizer:
             return result
         except json.JSONDecodeError:
             # 如果JSON解析失败，返回基于规则的解析结果
+            # 避免将原始响应内容作为结构化结果的一部分，以防止显示JSON内容
             return {
                 "intent": "knowledge_query",
                 "entity": self._extract_entity_simple(response),
                 "aspect": self._extract_aspect_simple(response),
                 "confidence": 0.6,
-                "raw_response": response
+                "error": "解析失败"
             }
 
     def _extract_entity_simple(self, query: str) -> str:

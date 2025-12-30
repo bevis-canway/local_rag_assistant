@@ -262,8 +262,9 @@ class RAGAgent:
                 # 如果有相关文档且确认是知识查询，格式化并使用RAG提示词
                 context = self.retriever.format_results(filtered_results)
                 prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
-            elif has_relevant_docs and intent_result.intent_type == "ambiguous" and intent_result.confidence >= 0.5:
-                # 即使是模糊查询，如果置信度不是太低且有相关文档，也使用RAG
+            elif has_relevant_docs and intent_result.intent_type == "ambiguous":
+                # 对于模糊查询，即使置信度较低，如果有相关文档也使用RAG
+                # 这样可以确保用户查询即使被误分类，只要有相关文档仍能获得准确回答
                 context = self.retriever.format_results(filtered_results)
                 prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
             else:
