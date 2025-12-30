@@ -208,6 +208,23 @@ class RAGAgent:
         if chat_history is None:
             chat_history = self.chat_history
 
+        # 检查是否是关于历史对话的查询
+        if self._is_history_query(user_question):
+            history_response = self._handle_history_query(user_question, chat_history)
+            if history_response:
+                # 更新对话历史
+                self.chat_history.append({
+                    "query": user_question,
+                    "response": history_response,
+                    "intent": "history_query"
+                })
+                
+                # 限制对话历史长度，避免过长
+                if len(self.chat_history) > 10:  # 保留最近10轮对话
+                    self.chat_history = self.chat_history[-10:]
+                
+                return history_response
+
         # 1. 进行意图识别
         intent_result: IntentResult = self.intent_recognizer.recognize_intent(user_question, chat_history)
         logger.info(f"意图识别结果: {intent_result.intent_type}, 置信度: {intent_result.confidence}")
@@ -253,6 +270,56 @@ class RAGAgent:
         except Exception as e:
             logger.error(f"调用Ollama模型失败: {e}")
             return f"抱歉，处理您的问题时出现错误: {str(e)}"
+    
+    def _is_history_query(self, query: str) -> bool:
+        """
+        检查查询是否涉及历史对话
+        """
+        history_keywords = [
+            "前面", "之前", "刚才", "上一个", "第一个", "历史", "之前问", "前面问", 
+            "刚才问", "上个", "之前的", "前面的", "刚才的", "我问", "我的问题",
+            "前面说", "刚才说", "之前说", "对话历史", "我们刚才", "我们之前"
+        ]
+        
+        query_lower = query.lower()
+        return any(keyword in query_lower for keyword in history_keywords)
+    
+    def _handle_history_query(self, query: str, chat_history: List[Dict]) -> str:
+        """
+        处理涉及历史对话的查询
+        """
+        if not chat_history:
+            return "我们还没有开始对话，您还没有问过任何问题。"
+        
+        # 根据查询类型提供不同的历史信息
+        if "第一个" in query or "第一个问题" in query:
+            first_turn = chat_history[0]
+            return f"您的第一个问题是：\"{first_turn['query']}\""
+        
+        elif "前面" in query or "之前" in query or "刚才" in query or "上一个" in query:
+            # 返回最近的几个对话
+            recent_history = chat_history[-3:]  # 返回最近3轮对话
+            history_str = "最近的对话记录：\n"
+            for i, turn in enumerate(recent_history, 1):
+                history_str += f"{i}. 问题: {turn['query']}\n   回答: {turn['response']}\n"
+            return history_str.strip()
+        
+        elif "什么问题" in query or "问了什么" in query:
+            # 返回最近的问题
+            recent_questions = [turn['query'] for turn in chat_history[-5:]]  # 最近5个问题
+            if recent_questions:
+                questions_str = "\n".join([f"- {q}" for q in recent_questions])
+                return f"您最近问过的问题包括：\n{questions_str}"
+            else:
+                return "我无法找到您之前问过的问题。"
+        
+        else:
+            # 默认返回最近的对话
+            recent_history = chat_history[-2:]  # 返回最近2轮对话
+            history_str = "最近的对话记录：\n"
+            for i, turn in enumerate(recent_history, 1):
+                history_str += f"{i}. 问题: {turn['query']}\n   回答: {turn['response']}\n"
+            return history_str.strip()
 
     def run_cli(self):
         """
