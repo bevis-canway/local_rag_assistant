@@ -208,8 +208,32 @@ class RAGAgent:
         if chat_history is None:
             chat_history = self.chat_history
 
-        # 检查是否是关于历史对话的查询
-        if self._is_history_query(user_question):
+        # 1. 进行意图识别
+        intent_result = self.intent_recognizer.recognize_intent(user_question, chat_history)
+        logger.info(f"意图识别结果: {intent_result.intent_type}, 置信度: {intent_result.confidence}")
+
+        # 2. 检查是否需要澄清
+        clarification = self.intent_recognizer.get_clarification_response(intent_result)
+        if clarification:
+            # 更新对话历史
+            self.chat_history.append({
+                "query": user_question,
+                "response": clarification,
+                "intent": "clarification"
+            })
+            
+            # 限制对话历史长度，避免过长
+            if len(self.chat_history) > 10:  # 保留最近10轮对话
+                self.chat_history = self.chat_history[-10:]
+            
+            return clarification
+
+        # 3. 根据意图类型决定处理方式
+        if intent_result.intent_type == "chitchat":
+            # 对于闲聊类意图，直接使用通用模型回答
+            prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
+        elif intent_result.intent_type == "history_query":
+            # 对于历史查询意图，使用专门的处理方法
             history_response = self._handle_history_query(user_question, chat_history)
             if history_response:
                 # 更新对话历史
@@ -224,36 +248,28 @@ class RAGAgent:
                     self.chat_history = self.chat_history[-10:]
                 
                 return history_response
-
-        # 1. 进行意图识别
-        intent_result: IntentResult = self.intent_recognizer.recognize_intent(user_question, chat_history)
-        logger.info(f"意图识别结果: {intent_result.intent_type}, 置信度: {intent_result.confidence}")
-        
-        # 2. 根据意图类型决定处理方式
-        if intent_result.intent_type == "chit_chat":
-            # 对于闲聊类意图，直接使用通用模型回答
-            prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
-        elif intent_result.intent_type == "history_query":
-            # 对于历史查询意图，使用专门的处理方法
-            history_response = self._handle_history_query(user_question, chat_history)
-            if history_response:
-                return history_response
             else:
                 prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
-        else:
-            # 对于其他意图类型，进行文档检索
-            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(user_question)
+        elif intent_result.intent_type in ["knowledge_query", "ambiguous"]:
+            # 对于知识查询，使用重写后的查询进行检索
+            rewritten_query = intent_result.extracted_info.get("rewritten_query", user_question)
+            
+            # 进行文档检索
+            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(rewritten_query)
 
             if has_relevant_docs:
                 # 如果有相关文档，格式化并使用RAG提示词
                 context = self.retriever.format_results(filtered_results)
-                prompt = self.prompt_engineer.build_rag_prompt(user_question, context)
+                prompt = self.prompt_engineer.build_rag_prompt(rewritten_query, context)
             else:
                 # 如果没有相关文档，使用无文档提示词
                 logger.info("未找到相关文档，使用通用模型回答")
-                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
+                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=rewritten_query)
+        else:
+            # 其他意图类型，使用通用模型回答
+            prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
 
-        # 3. 调用Ollama模型
+        # 4. 调用Ollama模型
         try:
             response = ollama.chat(
                 model=self.config.OLLAMA_MODEL,
