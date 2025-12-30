@@ -110,6 +110,15 @@
 
 ## ✅ 已完成功能
 
+### V1.5.0 - 意图识别优化
+- [x] **基于aidev项目实现方式优化用户意图识别**
+  - 添加history_query意图类型，专门处理历史对话查询
+  - 实现_query_rewrite_for_independence方法，支持将用户查询重写为独立查询
+  - 优化意图识别逻辑，参考aidev项目的实现方式
+  - 添加_query_classification_prompt构建方法，支持查询类型分类
+  - 实现专门的_history_query识别方法
+  - 改进意图识别准确性
+
 ### V1.4.0 - 对话历史上下文理解优化
 - [x] **优化对话历史上下文理解功能**
   - 实现_is_history_query方法，识别涉及历史对话的查询

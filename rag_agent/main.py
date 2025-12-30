@@ -233,6 +233,13 @@ class RAGAgent:
         if intent_result.intent_type == "chit_chat":
             # 对于闲聊类意图，直接使用通用模型回答
             prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
+        elif intent_result.intent_type == "history_query":
+            # 对于历史查询意图，使用专门的处理方法
+            history_response = self._handle_history_query(user_question, chat_history)
+            if history_response:
+                return history_response
+            else:
+                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
         else:
             # 对于其他意图类型，进行文档检索
             filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(user_question)
@@ -270,7 +277,7 @@ class RAGAgent:
         except Exception as e:
             logger.error(f"调用Ollama模型失败: {e}")
             return f"抱歉，处理您的问题时出现错误: {str(e)}"
-    
+
     def _is_history_query(self, query: str) -> bool:
         """
         检查查询是否涉及历史对话
