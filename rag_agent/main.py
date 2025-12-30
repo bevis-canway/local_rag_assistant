@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
@@ -13,9 +13,10 @@ import tiktoken
 
 # 使用绝对导入替代相对导入
 from rag_agent.config import Config
+from rag_agent.intent.intent_recognizer import IntentRecognizer, IntentResult  # 添加意图识别导入
 from rag_agent.obsidian_connector import ObsidianConnector
 from rag_agent.prompt_engineer import PromptEngineer
-from rag_agent.prompts.prompt_templates import RAG_PROMPT_TEMPLATES
+from rag_agent.prompts.prompt_templates import RAG_PROMPT_TEMPLATES  # 添加此行以导入提示词模板
 from rag_agent.retriever import Retriever
 from rag_agent.vector_store import VectorStore
 
@@ -60,10 +61,17 @@ class RAGAgent:
             top_k=config.TOP_K,
             similarity_threshold=similarity_threshold,
         )
+        
+        # 初始化意图识别器
+        self.intent_recognizer = IntentRecognizer(config, self.vector_store)
+        
         self.prompt_engineer = PromptEngineer()
 
         # 初始化分词器用于计算token
         self.tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        
+        # 初始化对话历史
+        self.chat_history = []
 
     def index_obsidian_notes(self):
         """
@@ -190,23 +198,36 @@ class RAGAgent:
 
         return chunks
 
-    def query(self, user_question: str) -> str:
+    def query(self, user_question: str, chat_history: List[Dict] = None) -> str:
         """
         处理用户查询
         """
         logger.info(f"处理查询: {user_question}")
 
-        # 1. 检索相关文档并判断是否有相关文档
-        filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(user_question)
+        # 如果没有提供对话历史，则使用实例的对话历史
+        if chat_history is None:
+            chat_history = self.chat_history
 
-        if has_relevant_docs:
-            # 如果有相关文档，格式化并使用RAG提示词
-            context = self.retriever.format_results(filtered_results)
-            prompt = self.prompt_engineer.build_rag_prompt(user_question, context)
-        else:
-            # 如果没有相关文档，使用无文档提示词
-            logger.info("未找到相关文档，使用通用模型回答")
+        # 1. 进行意图识别
+        intent_result: IntentResult = self.intent_recognizer.recognize_intent(user_question, chat_history)
+        logger.info(f"意图识别结果: {intent_result.intent_type}, 置信度: {intent_result.confidence}")
+        
+        # 2. 根据意图类型决定处理方式
+        if intent_result.intent_type == "chit_chat":
+            # 对于闲聊类意图，直接使用通用模型回答
             prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
+        else:
+            # 对于其他意图类型，进行文档检索
+            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(user_question)
+
+            if has_relevant_docs:
+                # 如果有相关文档，格式化并使用RAG提示词
+                context = self.retriever.format_results(filtered_results)
+                prompt = self.prompt_engineer.build_rag_prompt(user_question, context)
+            else:
+                # 如果没有相关文档，使用无文档提示词
+                logger.info("未找到相关文档，使用通用模型回答")
+                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
 
         # 3. 调用Ollama模型
         try:
@@ -216,6 +237,18 @@ class RAGAgent:
             )
             answer = response["message"]["content"]
             logger.info("成功获取模型回答")
+            
+            # 更新对话历史
+            self.chat_history.append({
+                "query": user_question,
+                "response": answer,
+                "intent": intent_result.intent_type
+            })
+            
+            # 限制对话历史长度，避免过长
+            if len(self.chat_history) > 10:  # 保留最近10轮对话
+                self.chat_history = self.chat_history[-10:]
+            
             return answer
         except Exception as e:
             logger.error(f"调用Ollama模型失败: {e}")
@@ -226,9 +259,10 @@ class RAGAgent:
         运行命令行交互界面
         """
         print(
-            "RAG智能体已启动！输入 'quit' 或 'exit' 退出，输入 'reindex' 重新索引笔记。"
+            "小魔仙RAG智能体已启动！输入 'quit' 或 'exit' 退出，输入 'reindex' 重新索引笔记。"
         )
         print("输入 'status' 查看向量库状态。")
+        print("输入 'clear' 清空对话历史。")
 
         while True:
             try:
@@ -246,11 +280,15 @@ class RAGAgent:
                     stats = self.vector_store.collection.count()
                     print(f"向量库状态: 当前有 {stats} 个文档块")
                     continue
+                elif user_input.lower() == "clear":
+                    self.chat_history = []
+                    print("对话历史已清空。")
+                    continue
                 elif not user_input:
                     continue
 
-                # 处理查询
-                answer = self.query(user_input)
+                # 处理查询，传递当前对话历史
+                answer = self.query(user_input, self.chat_history)
                 print(f"\n回答: {answer}")
 
             except KeyboardInterrupt:

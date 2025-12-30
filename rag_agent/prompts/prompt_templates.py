@@ -35,6 +35,33 @@ User question:
 
 Based on the above document content and your general knowledge, please provide a comprehensive and accurate answer in Chinese. If the documents provide relevant information, prioritize that information in your response.
 """,
+    "intent_recognition": """请分析用户查询的意图类型。
+
+意图类型定义：
+{intent_descriptions}
+
+用户查询：{query}
+
+请分析该查询属于哪种意图类型，并简要说明理由。返回格式：
+意图类型: [类型名称]
+置信度: [0-1之间的数值]
+理由: [简要说明]
+""",
+    "intent_recognition_with_history": """请分析用户查询的意图类型，考虑历史对话上下文。
+
+意图类型定义：
+{intent_descriptions}
+
+历史对话：
+{chat_history}
+
+用户查询：{query}
+
+请分析该查询属于哪种意图类型，并简要说明理由。返回格式：
+意图类型: [类型名称]
+置信度: [0-1之间的数值]
+理由: [简要说明]
+""",
 }
 
 # System prompts
