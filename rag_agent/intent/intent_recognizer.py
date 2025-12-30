@@ -24,6 +24,8 @@ class IntentResult:
     confidence: float  # 置信度
     entity: str = ""  # 实体
     aspect: str = ""  # 方面
+    original_query: str = ""  # 原始查询
+    rewritten_query: str = ""  # 重写后的查询
     extracted_info: Dict = None  # 提取的额外信息
 
 
@@ -32,12 +34,12 @@ class IntentRecognizer:
     高级意图识别器
     实现查询分类、历史对话感知的查询重写、结构化意图解析等功能
     """
-    
+
     def __init__(self, config: Config, vector_store: VectorStore = None):
         self.config = config
         self.vector_store = vector_store
         self.ollama_model = config.OLLAMA_MODEL
-        
+
         # 定义意图类型
         self.intent_types = {
             "chitchat": "闲聊类查询",
@@ -60,11 +62,17 @@ class IntentRecognizer:
         """
         # 1. 检查是否为历史对话查询
         if self._is_history_query(query):
-            return IntentResult("history_query", 1.0, extracted_info={"query_text": query})
-        
+            return IntentResult(
+                intent_type="history_query",
+                confidence=1.0,
+                original_query=query,
+                rewritten_query=query,
+                extracted_info={"query_text": query}
+            )
+
         # 2. 进行查询分类
         classification_result = self._classify_query(query, chat_history)
-        
+
         # 3. 如果是知识查询，进行历史感知的查询重写
         if classification_result["intent"] == "knowledge_query":
             rewritten_query = self._rewrite_query_with_history(query, chat_history)
@@ -73,28 +81,34 @@ class IntentRecognizer:
         else:
             classification_result["original_query"] = query
             classification_result["rewritten_query"] = query
-        
+
         # 4. 进行结构化意图解析
         structured_result = self._parse_structured_intent(
-            classification_result["rewritten_query"], 
+            classification_result["rewritten_query"],
             classification_result["intent"]
         )
-        
+
         # 5. 检查置信度并决定是否需要澄清
-        if structured_result["confidence"] < 0.7:
+        final_confidence = structured_result.get("confidence", classification_result.get("confidence", 0.5))
+
+        if final_confidence < 0.7 and classification_result["intent"] != "chitchat":
             return IntentResult(
-                "ambiguous", 
-                structured_result["confidence"],
+                intent_type="ambiguous",
+                confidence=final_confidence,
                 entity=structured_result.get("entity", ""),
                 aspect=structured_result.get("aspect", ""),
+                original_query=classification_result["original_query"],
+                rewritten_query=classification_result["rewritten_query"],
                 extracted_info=structured_result
             )
-        
+
         return IntentResult(
-            intent_type=structured_result["intent"],
-            confidence=structured_result["confidence"],
+            intent_type=classification_result["intent"],
+            confidence=final_confidence,
             entity=structured_result.get("entity", ""),
             aspect=structured_result.get("aspect", ""),
+            original_query=classification_result["original_query"],
+            rewritten_query=classification_result["rewritten_query"],
             extracted_info=structured_result
         )
 
@@ -103,12 +117,12 @@ class IntentRecognizer:
         检查是否为历史对话查询
         """
         history_keywords = [
-            "前面", "之前", "刚才", "上一个", "第一个", "历史", "之前问", "前面问", 
+            "前面", "之前", "刚才", "上一个", "第一个", "历史", "之前问", "前面问",
             "刚才问", "上个", "之前的", "前面的", "刚才的", "我问", "我的问题",
-            "前面说", "刚才说", "之前说", "对话历史", "我们刚才", "我们之前", 
+            "前面说", "刚才说", "之前说", "对话历史", "我们刚才", "我们之前",
             "刚才说了什么", "之前说了什么", "前面说了什么"
         ]
-        
+
         query_lower = query.lower()
         return any(keyword in query_lower for keyword in history_keywords)
 
@@ -116,28 +130,69 @@ class IntentRecognizer:
         """
         查询分类：将用户输入分为四类
         """
+        # 先进行快速关键词匹配，提高准确性
+        quick_classification = self._quick_classify_by_keywords(query)
+        if quick_classification:
+            return quick_classification
+
         # 构建分类提示词
         prompt = self._build_classification_prompt(query, chat_history)
-        
+
         try:
             response = ollama.chat(
                 model=self.ollama_model,
                 messages=[{"role": "user", "content": prompt}],
             )
-            
+
             result = response["message"]["content"].strip()
-            
+
             # 解析分类结果
             return self._parse_classification_result(result, query)
-            
+
         except Exception as e:
             logger.error(f"查询分类失败: {e}")
             # 默认返回知识查询
             return {
                 "intent": "knowledge_query",
-                "confidence": 0.5,
+                "confidence": 0.6,
                 "reason": "分类失败，使用默认分类"
             }
+
+    def _quick_classify_by_keywords(self, query: str) -> Optional[Dict]:
+        """
+        快速关键词匹配分类
+        """
+        query_lower = query.lower()
+
+        # 闲聊类关键词
+        chitchat_keywords = ["你好", "您好", "谢谢", "再见", "拜拜", "hi", "hello", "早上好", "晚上好", "中午好"]
+        if any(keyword in query_lower for keyword in chitchat_keywords):
+            return {
+                "intent": "chitchat",
+                "confidence": 0.9,
+                "reason": "匹配到闲聊关键词"
+            }
+
+        # 工具请求关键词
+        tool_keywords = ["帮我", "计算", "转换", "生成", "翻译", "总结", "分析", "提取"]
+        if any(keyword in query_lower for keyword in tool_keywords):
+            return {
+                "intent": "tool_request",
+                "confidence": 0.8,
+                "reason": "匹配到工具请求关键词"
+            }
+
+        # 知识查询关键词
+        knowledge_keywords = ["什么是", "怎么", "如何", "为什么", "什么", "哪个", "哪个是", "介绍", "解释", "说明",
+                              "定义", "概念", "了解", "查询", "搜索", "查找"]
+        if any(keyword in query_lower for keyword in knowledge_keywords):
+            return {
+                "intent": "knowledge_query",
+                "confidence": 0.85,
+                "reason": "匹配到知识查询关键词"
+            }
+
+        return None
 
     def _build_classification_prompt(self, query: str, chat_history: List[Dict] = None) -> str:
         """
@@ -145,19 +200,19 @@ class IntentRecognizer:
         """
         if chat_history:
             chat_history_str = "\n".join([
-                f"用户: {item['query']}\n助手: {item['response']}" 
+                f"用户: {item['query']}\n助手: {item['response']}"
                 for item in chat_history[-3:]  # 只取最近3轮对话
             ])
         else:
             chat_history_str = "无历史对话"
-        
+
         prompt = f"""
 请对以下用户输入进行分类：
 
 分类类型：
 1. chitchat（闲聊）：如问候、感谢、告别等
-2. knowledge_query（知识查询）：询问知识库中的信息
-3. tool_request（工具请求）：请求执行某种操作或使用工具
+2. knowledge_query（知识查询）：询问知识库中的信息，如"什么是XXX？"、"如何XXX？"、"XXX是什么？"
+3. tool_request（工具请求）：请求执行某种操作或使用工具，如"帮我XXX"、"计算XXX"、"生成XXX"
 4. ambiguous（模糊需澄清）：意图不明确，需要澄清
 
 用户输入：{query}
@@ -174,7 +229,7 @@ class IntentRecognizer:
 
 只返回JSON格式的内容，不要返回其他内容。
 """
-        
+
         return prompt
 
     def _parse_classification_result(self, response: str, original_query: str) -> Dict:
@@ -188,19 +243,24 @@ class IntentRecognizer:
         except json.JSONDecodeError:
             # 如果JSON解析失败，尝试从文本中提取信息
             response_lower = response.lower()
-            
-            if "chitchat" in response_lower or any(greeting in original_query for greeting in ["你好", "谢谢", "再见", "hello", "hi"]):
+
+            if "chitchat" in response_lower or any(
+                    greeting in original_query for greeting in ["你好", "您好", "谢谢", "再见", "拜拜", "hello", "hi"]):
                 intent = "chitchat"
+                confidence = 0.8
             elif "tool_request" in response_lower:
                 intent = "tool_request"
+                confidence = 0.75
             elif "ambiguous" in response_lower:
                 intent = "ambiguous"
+                confidence = 0.4
             else:
                 intent = "knowledge_query"  # 默认为知识查询
-            
+                confidence = 0.7
+
             return {
                 "intent": intent,
-                "confidence": 0.6,  # 默认置信度
+                "confidence": confidence,
                 "reason": "解析失败，使用规则匹配"
             }
 
@@ -211,22 +271,30 @@ class IntentRecognizer:
         """
         if not chat_history:
             return query
-        
+
+        # 检查查询是否包含指代词
+        reference_words = ["它", "这个", "那个", "这些", "那些", "其", "该"]
+        contains_reference = any(ref in query for ref in reference_words)
+
+        if not contains_reference:
+            # 如果查询不包含指代词，则不需要重写
+            return query
+
         # 构建重写提示词
         prompt = self._build_query_rewrite_prompt(query, chat_history)
-        
+
         try:
             response = ollama.chat(
                 model=self.ollama_model,
                 messages=[{"role": "user", "content": prompt}],
             )
-            
+
             rewritten_query = response["message"]["content"].strip()
-            
+
             # 如果返回的结果为空或与原查询相同，返回原查询
-            if not rewritten_query or rewritten_query.strip() == query or "无法重写" in rewritten_query:
+            if not rewritten_query or rewritten_query.strip() == query or "无法重写" in rewritten_query or rewritten_query.strip() == "无":
                 return query
-            
+
             return rewritten_query
         except Exception as e:
             logger.error(f"查询重写失败: {e}")
@@ -238,12 +306,12 @@ class IntentRecognizer:
         """
         if chat_history:
             chat_history_str = "\n".join([
-                f"用户: {item['query']}\n助手: {item['response']}" 
+                f"用户: {item['query']}\n助手: {item['response']}"
                 for item in chat_history[-3:]  # 只取最近3轮对话
             ])
         else:
             chat_history_str = ""
-        
+
         prompt = f"""
 你是一个智能对话系统，负责将用户的最新输入重写成一个完全独立的查询。
 
@@ -265,7 +333,7 @@ class IntentRecognizer:
 
 请只返回重写后的查询，不要返回其他内容。
 """
-        
+
         return prompt
 
     def _parse_structured_intent(self, query: str, intent_type: str) -> Dict:
@@ -281,31 +349,42 @@ class IntentRecognizer:
                 "confidence": 0.9,
                 "query": query
             }
-        
+
         # 构建结构化解析提示词
         prompt = self._build_structured_parsing_prompt(query)
-        
+
         try:
             response = ollama.chat(
                 model=self.ollama_model,
                 messages=[{"role": "user", "content": prompt}],
             )
-            
+
             result = response["message"]["content"].strip()
-            
+
             # 解析结构化结果
             return self._parse_structured_result(result)
-            
+
         except Exception as e:
             logger.error(f"结构化意图解析失败: {e}")
-            return {
-                "intent": intent_type,
-                "entity": "",
-                "aspect": "",
-                "confidence": 0.5,
-                "query": query,
-                "error": str(e)
-            }
+            # 对于知识查询，即使解析失败也给予较高置信度
+            if intent_type == "knowledge_query":
+                return {
+                    "intent": intent_type,
+                    "entity": self._extract_entity_simple(query),
+                    "aspect": self._extract_aspect_simple(query),
+                    "confidence": 0.75,
+                    "query": query,
+                    "error": str(e)
+                }
+            else:
+                return {
+                    "intent": intent_type,
+                    "entity": "",
+                    "aspect": "",
+                    "confidence": 0.5,
+                    "query": query,
+                    "error": str(e)
+                }
 
     def _build_structured_parsing_prompt(self, query: str) -> str:
         """
@@ -335,7 +414,7 @@ class IntentRecognizer:
 
 只返回JSON格式的内容，不要返回其他内容。
 """
-        
+
         return prompt
 
     def _parse_structured_result(self, response: str) -> Dict:
@@ -347,24 +426,46 @@ class IntentRecognizer:
             result = json.loads(response)
             return result
         except json.JSONDecodeError:
-            # 如果JSON解析失败，返回默认结构
+            # 如果JSON解析失败，返回基于规则的解析结果
             return {
                 "intent": "knowledge_query",
-                "entity": "",
-                "aspect": "",
-                "confidence": 0.5,
+                "entity": self._extract_entity_simple(response),
+                "aspect": self._extract_aspect_simple(response),
+                "confidence": 0.6,
                 "raw_response": response
             }
+
+    def _extract_entity_simple(self, query: str) -> str:
+        """
+        简单的实体提取
+        """
+        # 这里可以实现简单的实体提取逻辑
+        # 暂时返回空字符串，实际应用中可以使用NLP技术进行实体识别
+        return ""
+
+    def _extract_aspect_simple(self, query: str) -> str:
+        """
+        简单的方面提取
+        """
+        # 简单地从查询中提取可能的方面
+        aspect_keywords = ["什么", "如何", "怎么", "为什么", "哪个", "哪个是", "怎样", "多大", "多少", "哪里", "何时"]
+        for keyword in aspect_keywords:
+            if keyword in query:
+                # 返回关键词后面的部分
+                parts = query.split(keyword)
+                if len(parts) > 1:
+                    return f"{keyword}{parts[1]}"
+        return query
 
     def get_clarification_response(self, intent_result: IntentResult) -> str:
         """
         获取澄清响应
         当置信度较低时，返回澄清消息
         """
-        if intent_result.confidence >= 0.7:
+        if intent_result.confidence >= 0.7 or intent_result.intent_type == "chitchat":
             return None  # 不需要澄清
-        
+
         entity = intent_result.entity or "相关信息"
         aspect = intent_result.aspect or "方面"
-        
+
         return f"抱歉，您是指关于 {entity} 的 {aspect} 吗？请提供更具体的信息，这样我可以更好地帮助您。"

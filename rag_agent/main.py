@@ -214,7 +214,7 @@ class RAGAgent:
 
         # 2. 检查是否需要澄清
         clarification = self.intent_recognizer.get_clarification_response(intent_result)
-        if clarification:
+        if clarification and intent_result.intent_type != "history_query":
             # 更新对话历史
             self.chat_history.append({
                 "query": user_question,
@@ -251,20 +251,25 @@ class RAGAgent:
             else:
                 prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
         elif intent_result.intent_type in ["knowledge_query", "ambiguous"]:
-            # 对于知识查询，使用重写后的查询进行检索
-            rewritten_query = intent_result.extracted_info.get("rewritten_query", user_question)
+            # 对于知识查询或模糊查询（但置信度不够需要澄清的），使用重写后的查询进行检索
+            # 注意：即使置信度较低，我们也尝试检索，因为这可能是一个有效的知识查询
+            query_to_use = intent_result.rewritten_query if intent_result.rewritten_query else user_question
             
             # 进行文档检索
-            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(rewritten_query)
+            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(query_to_use)
 
-            if has_relevant_docs:
-                # 如果有相关文档，格式化并使用RAG提示词
+            if has_relevant_docs and intent_result.intent_type == "knowledge_query":
+                # 如果有相关文档且确认是知识查询，格式化并使用RAG提示词
                 context = self.retriever.format_results(filtered_results)
-                prompt = self.prompt_engineer.build_rag_prompt(rewritten_query, context)
+                prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
+            elif has_relevant_docs and intent_result.intent_type == "ambiguous" and intent_result.confidence >= 0.5:
+                # 即使是模糊查询，如果置信度不是太低且有相关文档，也使用RAG
+                context = self.retriever.format_results(filtered_results)
+                prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
             else:
                 # 如果没有相关文档，使用无文档提示词
                 logger.info("未找到相关文档，使用通用模型回答")
-                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=rewritten_query)
+                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=query_to_use)
         else:
             # 其他意图类型，使用通用模型回答
             prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
