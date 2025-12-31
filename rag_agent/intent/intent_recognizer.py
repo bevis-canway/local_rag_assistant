@@ -5,6 +5,7 @@
 """
 import json
 import logging
+import sys
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -14,7 +15,23 @@ from ..config import Config
 from ..prompts.prompt_templates import RAG_PROMPT_TEMPLATES
 from ..vector_store import VectorStore
 
+# 配置日志记录器
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# 如果没有处理器，添加控制台处理器
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+# 为了确保日志输出，同时提供一个直接打印的备用方式
+def debug_print(message):
+    """备用调试打印函数"""
+    import datetime
+    print(f"[DEBUG] {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
 
 
 @dataclass
@@ -60,33 +77,57 @@ class IntentRecognizer:
         Returns:
             IntentResult: 意图识别结果
         """
+        logger.info(f"开始识别意图，查询: {query}")
+        debug_print(f"开始识别意图，查询: {query}")
+        
         # 1. 检查是否为历史对话查询
-        if self._is_history_query(query):
-            return IntentResult(
+        is_history = self._is_history_query(query)
+        logger.debug(f"历史对话查询检查结果: {is_history}")
+        debug_print(f"历史对话查询检查结果: {is_history}")
+        
+        if is_history:
+            result = IntentResult(
                 intent_type="history_query",
                 confidence=1.0,
                 original_query=query,
                 rewritten_query=query,
                 extracted_info={"query_text": query}
             )
+            logger.info(f"识别为历史查询，结果: {result.intent_type}")
+            debug_print(f"识别为历史查询，结果: {result.intent_type}")
+            return result
 
         # 2. 进行查询分类
+        logger.debug("开始查询分类")
+        debug_print("开始查询分类")
         classification_result = self._classify_query(query, chat_history)
+        logger.debug(f"查询分类结果: {classification_result}")
+        debug_print(f"查询分类结果: {classification_result}")
 
         # 3. 如果是知识查询，进行历史感知的查询重写
         if classification_result["intent"] == "knowledge_query":
+            logger.debug("进行查询重写")
+            debug_print("进行查询重写")
             rewritten_query = self._rewrite_query_with_history(query, chat_history)
             classification_result["original_query"] = query
             classification_result["rewritten_query"] = rewritten_query
+            logger.debug(f"查询重写完成，原查询: {query}, 重写后: {rewritten_query}")
+            debug_print(f"查询重写完成，原查询: {query}, 重写后: {rewritten_query}")
         else:
             classification_result["original_query"] = query
             classification_result["rewritten_query"] = query
+            logger.debug(f"非知识查询，无需重写，意图: {classification_result['intent']}")
+            debug_print(f"非知识查询，无需重写，意图: {classification_result['intent']}")
 
         # 4. 进行结构化意图解析
+        logger.debug("开始结构化意图解析")
+        debug_print("开始结构化意图解析")
         structured_result = self._parse_structured_intent(
             classification_result["rewritten_query"],
             classification_result["intent"]
         )
+        logger.debug(f"结构化意图解析结果: {structured_result}")
+        debug_print(f"结构化意图解析结果: {structured_result}")
 
         # 5. 检查置信度并决定是否需要澄清
         # 对于知识查询，降低澄清阈值，因为这类查询通常不需要澄清
@@ -94,12 +135,15 @@ class IntentRecognizer:
         
         # 如果是知识查询，置信度阈值降低到0.6，因为这类查询通常比较明确
         if classification_result["intent"] == "knowledge_query":
-            clarification_threshold = 0.6
+            clarification_threshold = 0.3
         else:
-            clarification_threshold = 0.7
+            clarification_threshold = 0.4
+        
+        logger.debug(f"置信度: {base_confidence}, 澄清阈值: {clarification_threshold}")
+        debug_print(f"置信度: {base_confidence}, 澄清阈值: {clarification_threshold}")
 
         if base_confidence < clarification_threshold and classification_result["intent"] != "chitchat":
-            return IntentResult(
+            result = IntentResult(
                 intent_type="ambiguous",
                 confidence=base_confidence,
                 entity=structured_result.get("entity", ""),
@@ -108,8 +152,11 @@ class IntentRecognizer:
                 rewritten_query=classification_result["rewritten_query"],
                 extracted_info=structured_result
             )
+            logger.info(f"识别为模糊意图，需要澄清，置信度: {base_confidence}")
+            debug_print(f"识别为模糊意图，需要澄清，置信度: {base_confidence}")
+            return result
 
-        return IntentResult(
+        result = IntentResult(
             intent_type=classification_result["intent"],
             confidence=base_confidence,
             entity=structured_result.get("entity", ""),
@@ -118,11 +165,17 @@ class IntentRecognizer:
             rewritten_query=classification_result["rewritten_query"],
             extracted_info=structured_result
         )
+        logger.info(f"意图识别完成，类型: {result.intent_type}, 置信度: {result.confidence}")
+        debug_print(f"意图识别完成，类型: {result.intent_type}, 置信度: {result.confidence}")
+        return result
 
     def _is_history_query(self, query: str) -> bool:
         """
         检查是否为历史对话查询
         """
+        logger.debug(f"检查是否为历史对话查询: {query}")
+        debug_print(f"检查是否为历史对话查询: {query}")
+        
         history_keywords = [
             "前面", "之前", "刚才", "上一个", "第一个", "历史", "之前问", "前面问",
             "刚才问", "上个", "之前的", "前面的", "刚才的", "我问", "我的问题",
@@ -131,7 +184,10 @@ class IntentRecognizer:
         ]
 
         query_lower = query.lower()
-        return any(keyword in query_lower for keyword in history_keywords)
+        is_history = any(keyword in query_lower for keyword in history_keywords)
+        logger.debug(f"历史查询检查结果: {is_history}")
+        debug_print(f"历史查询检查结果: {is_history}")
+        return is_history
 
     def _classify_query(self, query: str, chat_history: List[Dict] = None) -> Dict:
         """
@@ -158,6 +214,7 @@ class IntentRecognizer:
 
         except Exception as e:
             logger.error(f"查询分类失败: {e}")
+            debug_print(f"查询分类失败: {e}")
             # 默认返回知识查询
             return {
                 "intent": "knowledge_query",
@@ -169,43 +226,50 @@ class IntentRecognizer:
         """
         快速关键词匹配分类
         """
+        logger.debug(f"快速关键词匹配分类，查询: {query}")
+        debug_print(f"快速关键词匹配分类，查询: {query}")
+        
         query_lower = query.lower()
 
         # 闲聊类关键词
         chitchat_keywords = ["你好", "您好", "谢谢", "再见", "拜拜", "hi", "hello", "早上好", "晚上好", "中午好"]
         if any(keyword in query_lower for keyword in chitchat_keywords):
-            return {
+            result = {
                 "intent": "chitchat",
                 "confidence": 0.9,
                 "reason": "匹配到闲聊关键词"
             }
+            logger.debug(f"匹配到闲聊关键词，结果: {result}")
+            debug_print(f"匹配到闲聊关键词，结果: {result}")
+            return result
 
         # 工具请求关键词
         tool_keywords = ["帮我", "计算", "转换", "生成", "翻译", "总结", "分析", "提取"]
         if any(keyword in query_lower for keyword in tool_keywords):
-            return {
+            result = {
                 "intent": "tool_request",
                 "confidence": 0.8,
                 "reason": "匹配到工具请求关键词"
             }
+            logger.debug(f"匹配到工具请求关键词，结果: {result}")
+            debug_print(f"匹配到工具请求关键词，结果: {result}")
+            return result
 
         # 知识查询关键词
         knowledge_keywords = ["什么是", "怎么", "如何", "为什么", "什么", "哪个", "哪个是", "介绍", "解释", "说明",
                               "定义", "概念", "了解", "查询", "搜索", "查找", "人才偏好", "公司", "企业"]
         if any(keyword in query_lower for keyword in knowledge_keywords):
-            # 特别处理包含"公司"和"人才偏好"的查询，这通常是明确的知识查询
-            if "公司" in query_lower and "人才偏好" in query_lower:
-                return {
-                    "intent": "knowledge_query",
-                    "confidence": 0.9,
-                    "reason": "匹配到公司人才偏好查询关键词"
-                }
-            return {
+            result = {
                 "intent": "knowledge_query",
                 "confidence": 0.85,
                 "reason": "匹配到知识查询关键词"
             }
+            logger.debug(f"匹配到知识查询关键词，结果: {result}")
+            debug_print(f"匹配到知识查询关键词，结果: {result}")
+            return result
 
+        logger.debug("未匹配到任何关键词")
+        debug_print("未匹配到任何关键词")
         return None
 
     def _build_classification_prompt(self, query: str, chat_history: List[Dict] = None) -> str:
@@ -253,9 +317,13 @@ class IntentRecognizer:
         try:
             # 尝试解析JSON响应
             result = json.loads(response)
+            logger.info(f"分类结果: {result}")
+            debug_print(f"分类结果: {result}")
             return result
         except json.JSONDecodeError:
             # 如果JSON解析失败，尝试从文本中提取信息
+            logger.error(f"JSON解析失败，尝试从文本中提取信息: {response}")
+            debug_print(f"JSON解析失败，尝试从文本中提取信息: {response}")
             response_lower = response.lower()
 
             if "chitchat" in response_lower or any(
@@ -304,6 +372,8 @@ class IntentRecognizer:
             )
 
             rewritten_query = response["message"]["content"].strip()
+            logger.info(f"重写结果: {rewritten_query}")
+            debug_print(f"重写结果: {rewritten_query}")
 
             # 如果返回的结果为空或与原查询相同，返回原查询
             if not rewritten_query or rewritten_query.strip() == query or "无法重写" in rewritten_query or rewritten_query.strip() == "无":
@@ -312,6 +382,7 @@ class IntentRecognizer:
             return rewritten_query
         except Exception as e:
             logger.error(f"查询重写失败: {e}")
+            debug_print(f"查询重写失败: {e}")
             return query
 
     def _build_query_rewrite_prompt(self, query: str, chat_history: List[Dict] = None) -> str:
@@ -380,6 +451,7 @@ class IntentRecognizer:
 
         except Exception as e:
             logger.error(f"结构化意图解析失败: {e}")
+            debug_print(f"结构化意图解析失败: {e}")
             # 对于知识查询，即使解析失败也给予较高置信度
             if intent_type == "knowledge_query":
                 return {
@@ -438,6 +510,8 @@ class IntentRecognizer:
         try:
             # 尝试解析JSON响应
             result = json.loads(response)
+            logger.info(f"结构化结果: {result}")
+            debug_print(f"结构化结果: {result}")
             return result
         except json.JSONDecodeError:
             # 如果JSON解析失败，返回基于规则的解析结果
@@ -454,6 +528,8 @@ class IntentRecognizer:
         """
         简单的实体提取
         """
+        logger.debug(f"简单实体提取，查询: {query}")
+        debug_print(f"简单实体提取，查询: {query}")
         # 这里可以实现简单的实体提取逻辑
         # 暂时返回空字符串，实际应用中可以使用NLP技术进行实体识别
         return ""
@@ -462,6 +538,8 @@ class IntentRecognizer:
         """
         简单的方面提取
         """
+        logger.debug(f"简单方面提取，查询: {query}")
+        debug_print(f"简单方面提取，查询: {query}")
         # 简单地从查询中提取可能的方面
         aspect_keywords = ["什么", "如何", "怎么", "为什么", "哪个", "哪个是", "怎样", "多大", "多少", "哪里", "何时"]
         for keyword in aspect_keywords:
@@ -469,7 +547,12 @@ class IntentRecognizer:
                 # 返回关键词后面的部分
                 parts = query.split(keyword)
                 if len(parts) > 1:
-                    return f"{keyword}{parts[1]}"
+                    aspect = f"{keyword}{parts[1]}"
+                    logger.debug(f"提取到方面: {aspect}")
+                    debug_print(f"提取到方面: {aspect}")
+                    return aspect
+        logger.debug(f"未提取到特定方面，返回原查询: {query}")
+        debug_print(f"未提取到特定方面，返回原查询: {query}")
         return query
 
     def get_clarification_response(self, intent_result: IntentResult) -> str:
@@ -477,10 +560,19 @@ class IntentRecognizer:
         获取澄清响应
         当置信度较低时，返回澄清消息
         """
-        if intent_result.confidence >= 0.7 or intent_result.intent_type == "chitchat":
+        logger.debug(f"获取澄清响应，置信度: {intent_result.confidence}, 意图类型: {intent_result.intent_type}")
+        debug_print(f"获取澄清响应，置信度: {intent_result.confidence}, 意图类型: {intent_result.intent_type}")
+        
+        if intent_result.confidence >= 0.5 or intent_result.intent_type == "chitchat":
+            logger.debug("置信度足够高或为闲聊类型，无需澄清")
+            debug_print("置信度足够高或为闲聊类型，无需澄清")
             return None  # 不需要澄清
 
         entity = intent_result.entity or "相关信息"
         aspect = intent_result.aspect or "方面"
-
-        return f"抱歉，您是指关于 {entity} 的 {aspect} 吗？请提供更具体的信息，这样我可以更好地帮助您。"
+        
+        clarification = f"抱歉，您是指关于 {entity} 的 {aspect} 吗？请提供更具体的信息，这样我可以更好地帮助您。"
+        logger.debug(f"生成澄清消息: {clarification}")
+        debug_print(f"生成澄清消息: {clarification}")
+        
+        return clarification
