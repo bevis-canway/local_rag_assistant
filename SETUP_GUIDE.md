@@ -4,6 +4,17 @@
 
 小魔仙RAG智能体是一个现代化的检索增强生成系统，使用 uv 作为依赖管理工具，支持通过 Ollama API 使用本地模型进行嵌入计算。项目已集成完整的自动化构建工具，简化开发和部署流程。
 
+## 核心特性
+
+- **本地模型支持**：优先使用名为'小魔仙'的本地模型（对应 bge-m3:latest）进行嵌入计算
+- **Obsidian 集成**：直接连接 Obsidian 知识库，支持 Markdown 格式
+- **现代化依赖管理**：使用 uv 替代传统 pip，提供更快的依赖解析和安装
+- **自动化构建工具**：集成 Makefile，提供一键式开发体验
+- **代码质量保障**：集成 Ruff 进行代码格式化和质量检查
+- **提示词管理**：统一管理所有提示词模板，提高可维护性
+- **幻觉检测与预防**：集成双重检测机制，减少大模型幻觉现象
+- **优化的检索策略**：采用自适应相似度过滤，提高文档检索准确性
+
 ## 环境要求
 
 - Python 3.11+
@@ -145,14 +156,19 @@ uv run python -c "import ollama; ollama.embeddings(model='bge-m3:latest', prompt
   - [config.py](./rag_agent/config.py) - 配置管理
   - [obsidian_connector.py](./rag_agent/obsidian_connector.py) - Obsidian连接器
   - [vector_store.py](./rag_agent/vector_store.py) - 向量数据库（支持API嵌入）
-  - [retriever.py](./rag_agent/retriever.py) - 检索器
+  - [retriever.py](./rag_agent/retriever.py) - 检索器（含自适应相似度过滤）
   - [prompt_engineer.py](./rag_agent/prompt_engineer.py) - 提示工程
   - [main.py](./rag_agent/main.py) - 主程序
+  - [hallucination_detector.py](./rag_agent/hallucination_detector.py) - 幻觉检测模块
+  - [prompts/](./rag_agent/prompts/) - 提示词管理
+    - [prompt_templates.py](./rag_agent/prompts/prompt_templates.py) - RAG相关提示词
+    - [hallucination_templates.py](./rag_agent/prompts/hallucination_templates.py) - 幻觉检测相关提示词
 
 - [tests/](./tests/) - 测试套件
   - [test_connection.py](./tests/test_connection.py) - 连接测试
   - [test_demo.py](./tests/test_demo.py) - 演示测试
   - [test_embeddings.py](./tests/test_embeddings.py) - 嵌入测试
+  - [test_hallucination_detection.py](./tests/test_hallucination_detection.py) - 幻觉检测测试
 
 - [scripts/](./scripts/) - 脚本文件
   - [start_rag_agent.sh](./scripts/start_rag_agent.sh) - 启动脚本
@@ -211,13 +227,22 @@ print('✓ 小魔仙模型配置成功:', agent.vector_store.use_api_embeddings)
 "
 ```
 
-## 关键特性
+## 关键特性详解
 
-1. **现代化依赖管理**：使用 uv 替代传统 pip，提供更快的依赖解析和安装
-2. **自动化构建工具**：集成 Makefile，提供一键式开发体验
-3. **小魔仙模型支持**：优化支持 bge-m3:latest 本地模型
-4. **API嵌入支持**：支持通过Ollama API获取嵌入向量，无需下载本地模型
-5. **代码质量保障**：集成 Ruff 进行代码格式化和质量检查
-6. **错误处理**：改进了错误处理机制，提供更清晰的错误信息
+### 幻觉检测与预防
+- **双重检测机制**：基于事实对比和语义一致性的双重检测
+- **优化提示词**：添加防止幻觉的明确指令
+- **生成参数优化**：配置较低的temperature（0.2）减少随机性
+- **置信度评估**：对回答准确性进行量化评估
+
+### 优化的检索策略
+- **自适应阈值**：基于检索结果的平均相似度动态调整过滤标准
+- **多级过滤**：实现回退机制，确保相关文档不被错误过滤
+- **保留相对匹配**：确保即使整体相似度不高但相对匹配度最高的文档也能被保留
+
+### 提示词管理
+- **集中管理**：所有提示词模板统一管理
+- **功能分类**：按RAG、系统、格式化等分类管理
+- **中文优先**：所有提示词优先使用中文版本
 
 现在您可以使用现代化的工具链顺利运行小魔仙RAG智能体！
