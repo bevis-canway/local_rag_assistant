@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import ollama
 
-from rag_agent.prompts.prompt_templates import RAG_PROMPT_TEMPLATES
+from rag_agent.prompts.hallucination_detection_templates import HALLUCINATION_DETECTION_TEMPLATES
 
 
 @dataclass
@@ -127,22 +127,12 @@ class HallucinationDetector:
         # 构建检查提示词
         context = self._format_docs_for_checking(retrieved_docs)
         
-        prompt = f"""
-请检查以下生成的回答是否与提供的文档内容一致，没有包含文档中未提及的虚假信息。
-
-文档内容：
-{context}
-
-原始查询：{query}
-
-生成的回答：{response}
-
-请分析回答中是否存在与文档不一致或文档中未提及的信息。返回格式：
-一致性: [是/否]
-置信度: [0-1之间的数值]
-不一致之处: [列出不一致的具体内容，如果没有则写"无"]
-解释: [简要解释判断依据]
-        """.strip()
+        # 使用从模板文件导入的提示词
+        prompt = HALLUCINATION_DETECTION_TEMPLATES["semantic_consistency_check"].format(
+            context=context,
+            query=query,
+            response=response
+        )
         
         try:
             result = ollama.chat(
