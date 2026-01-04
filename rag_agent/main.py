@@ -13,6 +13,7 @@ import tiktoken
 
 # 使用绝对导入替代相对导入
 from rag_agent.config import Config
+from rag_agent.hallucination_detector import HallucinationDetector, HallucinationCheckResult
 from rag_agent.intent.intent_recognizer import IntentRecognizer, IntentResult  # 添加意图识别导入
 from rag_agent.obsidian_connector import ObsidianConnector
 from rag_agent.prompt_engineer import PromptEngineer
@@ -43,6 +44,9 @@ class RAGAgent:
             api_url=config.OBSIDIAN_API_URL,
             api_key=config.OBSIDIAN_API_KEY,
         )
+        
+        # 初始化幻觉检测器
+        self.hallucination_detector = HallucinationDetector(config)
 
         # 确保环境变量已设置，以便VectorStore可以使用API嵌入
 
@@ -60,6 +64,7 @@ class RAGAgent:
             self.vector_store,
             top_k=config.TOP_K,
             similarity_threshold=similarity_threshold,
+            config=config,
         )
         
         # 初始化意图识别器
@@ -280,9 +285,29 @@ class RAGAgent:
             response = ollama.chat(
                 model=self.config.OLLAMA_MODEL,
                 messages=[{"role": "user", "content": prompt}],
+                options=self.config.get_generation_options()
             )
             answer = response["message"]["content"]
             logger.info("成功获取模型回答")
+            
+            # 如果是知识查询且有相关文档，进行幻觉检测
+            if intent_result.intent_type in ["knowledge_query", "ambiguous"] and has_relevant_docs:
+                logger.info("进行幻觉检测...")
+                hallucination_result = self.hallucination_detector.detect_hallucinations(
+                    response=answer,
+                    retrieved_docs=filtered_results,
+                    query=query_to_use
+                )
+                
+                # 如果检测到幻觉且置信度较低，提供警告
+                if not hallucination_result.is_consistent and hallucination_result.confidence_score < 0.7:
+                    logger.warning(f"检测到潜在幻觉，置信度: {hallucination_result.confidence_score}")
+                    warning_msg = "\n\n⚠️ 注意：以下信息基于检索到的文档，但请谨慎验证关键信息的准确性。\n"
+                    answer += warning_msg
+                    
+                    # 记录不一致之处
+                    if hallucination_result.inconsistencies:
+                        logger.debug(f"检测到的不一致之处: {hallucination_result.inconsistencies}")
             
             # 更新对话历史
             self.chat_history.append({

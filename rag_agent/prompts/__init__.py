@@ -2,3 +2,7 @@
 提示词管理模块
 统一管理所有提示词模板
 """
+from .prompt_templates import RAG_PROMPT_TEMPLATES, SYSTEM_PROMPTS, FORMATTING_PROMPTS
+from .hallucination_prevention_templates import HALLUCINATION_PREVENTION_TEMPLATES
+
+__all__ = ["RAG_PROMPT_TEMPLATES", "SYSTEM_PROMPTS", "FORMATTING_PROMPTS", "HALLUCINATION_PREVENTION_TEMPLATES"]

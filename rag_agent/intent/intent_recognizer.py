@@ -138,11 +138,14 @@ class IntentRecognizer:
         # 对于知识查询，降低澄清阈值，因为这类查询通常不需要澄清
         base_confidence = structured_result.get("confidence", classification_result.get("confidence", 0.5))
         
+        # 根据经验调整澄清阈值，减少因低置信度导致的错误分类
         # 如果是知识查询，置信度阈值降低到0.6，因为这类查询通常比较明确
         if classification_result["intent"] == "knowledge_query":
-            clarification_threshold = 0.3
+            clarification_threshold = 0.6  # 提高知识查询的置信度阈值，减少错误分类
+        elif classification_result["intent"] == "chitchat":
+            clarification_threshold = 0.7  # 提高闲聊查询的置信度阈值
         else:
-            clarification_threshold = 0.4
+            clarification_threshold = 0.65
         
         logger.debug(f"置信度: {base_confidence}, 澄清阈值: {clarification_threshold}")
         debug_print(f"置信度: {base_confidence}, 澄清阈值: {clarification_threshold}")

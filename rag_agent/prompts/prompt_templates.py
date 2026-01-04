@@ -9,7 +9,7 @@ RAG_PROMPT_TEMPLATES = {
 
 I could not find content related to your question in the local knowledge base.
 
-Please try to answer the user's question based on your general knowledge. If the question involves very specific or professional content that you cannot answer accurately, please honestly inform the user that you cannot provide an accurate answer and suggest that they consult relevant materials or seek professional help.""",
+Please try to answer the user's question based on your general knowledge. If the question involves very specific or professional content that you cannot answer accurately, please honestly inform the user that you cannot provide an accurate answer and suggest that they consult relevant materials or seek professional help. Do not fabricate or hallucinate information - only provide information you are certain is accurate.""",
     "rag_answer": """You are a professional assistant, responding to humans in a useful, accurate, and concise manner.
 
 The user has uploaded some documents.
@@ -29,6 +29,7 @@ Please follow these principles:
 - Ensure the final answer is in Chinese.
 - The information you obtain may be unrelated to the need, please eliminate it in the final answer, or directly answer "I don't know". Absolutely do not return irrelevant information in the final answer.
 - If the final result contains incorrect information, be sure to return the result in natural language!
+- CRITICAL: Only include information that is directly supported by the provided context. Do not fabricate, infer, or hallucinate information that is not present in the context. If the answer cannot be found in the context, clearly state this limitation.
 
 User question:
 {query}

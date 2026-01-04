@@ -36,6 +36,19 @@ class Config(BaseModel):
 
     # 相似度阈值配置
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.3"))
+    
+    # 生成参数配置，用于减少幻觉
+    GENERATION_TEMPERATURE: float = float(os.getenv("GENERATION_TEMPERATURE", "0.2"))
+    GENERATION_TOP_P: float = float(os.getenv("GENERATION_TOP_P", "0.8"))
+    GENERATION_TOP_K: int = int(os.getenv("GENERATION_TOP_K", "30"))
 
     class Config:
         env_file = ".env"
+
+    def get_generation_options(self):
+        """获取生成参数选项"""
+        return {
+            "temperature": self.GENERATION_TEMPERATURE,
+            "top_p": self.GENERATION_TOP_P,
+            "top_k": self.GENERATION_TOP_K
+        }

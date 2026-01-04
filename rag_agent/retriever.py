@@ -22,7 +22,9 @@ class Retriever:
         vector_store: VectorStore,
         top_k: int = 5,
         similarity_threshold: float = 0.3,
+        config = None,
     ):
+        self.config = config
         self.vector_store = vector_store
         self.top_k = top_k
         # 相似度阈值，低于此值的文档将被忽略
@@ -120,6 +122,7 @@ class Retriever:
             response = ollama.chat(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
+                options=self.config.get_generation_options() if hasattr(self, 'config') else {"temperature": 0.2}
             )
 
             llm_answer = response["message"]["content"]
