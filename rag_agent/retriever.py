@@ -24,14 +24,16 @@ class Retriever:
         top_k: int = 5,
         similarity_threshold: float = 0.3,
         config = None,
+        knowledge_base_name: str = "default",  # 添加知识库名称参数
     ):
         self.config = config
         self.vector_store = vector_store
         self.top_k = top_k
         # 相似度阈值，低于此值的文档将被忽略
         self.similarity_threshold = similarity_threshold
+        self.knowledge_base_name = knowledge_base_name  # 添加知识库名称
 
-    def retrieve(self, query: str) -> List[Dict]:
+    def retrieve(self, query: str, knowledge_base_filter: str = None) -> List[Dict]:
         """
         检索与查询最相关的文档片段
         参考aidev项目中的知识库检索实现
@@ -39,17 +41,24 @@ class Retriever:
         try:
             results = self.vector_store.search(query, self.top_k)
             logger.info(f"检索到 {len(results)} 个相关文档片段")
+            
+            # 如果指定了知识库过滤器，则只返回指定知识库的文档
+            if knowledge_base_filter:
+                results = [result for result in results 
+                          if result.get('metadata', {}).get('knowledge_base') == knowledge_base_filter]
+                logger.info(f"过滤后，知识库 {knowledge_base_filter} 有 {len(results)} 个相关文档片段")
+            
             return results
         except Exception as e:
             logger.error(f"检索过程出错: {e}")
             return []
 
-    def retrieve_and_filter_by_similarity(self, query: str) -> Tuple[List[Dict], bool]:
+    def retrieve_and_filter_by_similarity(self, query: str, knowledge_base_filter: str = None) -> Tuple[List[Dict], bool]:
         """
         检索并根据相似度过滤文档
         返回过滤后的文档列表和是否找到相关文档的标志
         """
-        results = self.retrieve(query)
+        results = self.retrieve(query, knowledge_base_filter)
 
         if not results:
             logger.info("未检索到任何文档")
@@ -124,12 +133,12 @@ class Retriever:
 
         return "\n" + "=" * 50 + "\n".join(formatted_results) + "\n" + "=" * 50
 
-    def retrieve_and_format(self, query: str) -> str:
+    def retrieve_and_format(self, query: str, knowledge_base_filter: str = None) -> str:
         """
         检索并格式化返回结果
         如果未找到相关文档，或相关性不足，则使用本地大模型回答
         """
-        filtered_results, has_relevant_docs = self.retrieve_and_filter_by_similarity(query)
+        filtered_results, has_relevant_docs = self.retrieve_and_filter_by_similarity(query, knowledge_base_filter)
 
         # 如果没有找到相关文档，使用本地大模型回答
         if not has_relevant_docs:

@@ -22,6 +22,7 @@ from rag_agent.prompts.prompt_templates import RAG_PROMPT_TEMPLATES  # 添加此
 from rag_agent.retriever import Retriever
 from rag_agent.vector_store import VectorStore
 from rag_agent.streaming_handler import StreamingHandler, StreamEvent, EventType  # 导入流式响应处理模块
+from rag_agent.knowledge_base_manager import KnowledgeBaseManager, KnowledgeBaseConfig  # 导入多知识库管理模块
 
 # 配置日志
 logging.basicConfig(
@@ -40,6 +41,9 @@ class RAGAgent:
     def __init__(self, config: Config):
         self.config = config
 
+        # 初始化知识库管理器
+        self.knowledge_base_manager = KnowledgeBaseManager(config)
+        
         # 初始化各模块
         self.obsidian_connector = ObsidianConnector(
             vault_path=config.OBSIDIAN_VAULT_PATH,
@@ -59,7 +63,8 @@ class RAGAgent:
         if config.EMBEDDING_MODEL:
             os.environ.setdefault("EMBEDDING_MODEL", config.EMBEDDING_MODEL)
 
-        self.vector_store = VectorStore(persist_path=config.VECTOR_DB_PATH)
+        # 使用默认知识库的向量存储（保持向后兼容性）
+        self.vector_store = self.knowledge_base_manager.get_vector_store("default")
         # 使用可配置的相似度阈值，默认为0.3
         similarity_threshold = getattr(config, "SIMILARITY_THRESHOLD", 0.3)
         self.retriever = Retriever(
@@ -67,6 +72,7 @@ class RAGAgent:
             top_k=config.TOP_K,
             similarity_threshold=similarity_threshold,
             config=config,
+            knowledge_base_name="default",  # 指定默认知识库
         )
         
         # 初始化意图识别器
@@ -265,8 +271,8 @@ class RAGAgent:
             # 注意：即使置信度较低，我们也尝试检索，因为这可能是一个有效的知识查询
             query_to_use = intent_result.rewritten_query if intent_result.rewritten_query else user_question
             
-            # 进行文档检索
-            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(query_to_use)
+            # 进行文档检索 - 现在支持跨多个知识库检索
+            filtered_results, has_relevant_docs = self._retrieve_from_all_knowledge_bases(query_to_use)
 
             if has_relevant_docs and intent_result.intent_type == "knowledge_query":
                 # 如果有相关文档且确认是知识查询，格式化并使用RAG提示词
@@ -329,6 +335,51 @@ class RAGAgent:
         except Exception as e:
             logger.error(f"调用Ollama模型失败: {e}")
             return f"抱歉，处理您的问题时出现错误: {str(e)}"
+
+    def _retrieve_from_all_knowledge_bases(self, query: str):
+        """
+        从所有知识库中检索相关文档
+        """
+        all_filtered_results = []
+        has_relevant_docs = False
+        
+        # 获取所有启用的知识库
+        kb_infos = self.knowledge_base_manager.list_knowledge_bases()
+        enabled_kbs = [kb for kb in kb_infos if kb.enabled]
+        
+        logger.info(f"正在从 {len(enabled_kbs)} 个知识库中检索")
+        
+        for kb_info in enabled_kbs:
+            logger.debug(f"正在检索知识库: {kb_info.name}")
+            
+            # 获取该知识库的向量存储
+            vector_store = self.knowledge_base_manager.get_vector_store(kb_info.name)
+            if vector_store:
+                # 创建临时检索器用于该知识库
+                temp_retriever = Retriever(
+                    vector_store=vector_store,
+                    top_k=self.retriever.top_k,
+                    similarity_threshold=self.retriever.similarity_threshold,
+                    config=self.config,
+                    knowledge_base_name=kb_info.name
+                )
+                
+                # 从特定知识库检索
+                kb_results, kb_has_docs = temp_retriever.retrieve_and_filter_by_similarity(
+                    query, knowledge_base_filter=kb_info.name
+                )
+                
+                if kb_has_docs:
+                    logger.debug(f"知识库 {kb_info.name} 找到 {len(kb_results)} 个相关文档")
+                    all_filtered_results.extend(kb_results)
+                    has_relevant_docs = True
+                else:
+                    logger.debug(f"知识库 {kb_info.name} 未找到相关文档")
+            else:
+                logger.warning(f"无法获取知识库 {kb_info.name} 的向量存储")
+        
+        logger.info(f"总共从 {len(enabled_kbs)} 个知识库中检索到 {len(all_filtered_results)} 个相关文档")
+        return all_filtered_results, has_relevant_docs
 
     async def query_stream(self, user_question: str, chat_history: List[Dict] = None) -> AsyncGenerator[StreamEvent, None]:
         """
@@ -402,14 +453,14 @@ class RAGAgent:
             # 注意：即使置信度较低，我们也尝试检索，因为这可能是一个有效的知识查询
             query_to_use = intent_result.rewritten_query if intent_result.rewritten_query else user_question
             
-            # 进行文档检索
+            # 进行文档检索 - 现在支持跨多个知识库检索
             yield StreamEvent(
                 event=EventType.THINK,
                 content="正在检索相关文档...",
                 cover=False
             )
             
-            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(query_to_use)
+            filtered_results, has_relevant_docs = self._retrieve_from_all_knowledge_bases(query_to_use)
 
             if has_relevant_docs and intent_result.intent_type == "knowledge_query":
                 # 如果有相关文档且确认是知识查询，格式化并使用RAG提示词

@@ -22,9 +22,11 @@ class VectorStore:
         self,
         persist_path: str = "./vector_store",
         model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
+        collection_name: str = "obsidian_notes",  # 添加集合名称参数以支持多知识库
     ):
         self.client = chromadb.PersistentClient(path=persist_path)
-        self.collection = self.client.get_or_create_collection("obsidian_notes")
+        self.collection = self.client.get_or_create_collection(collection_name)
+        self.collection_name = collection_name
 
         # 检查是否配置了OpenAI兼容的API
         openai_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OLLAMA_API_KEY")

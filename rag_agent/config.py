@@ -41,6 +41,9 @@ class Config(BaseModel):
     GENERATION_TEMPERATURE: float = float(os.getenv("GENERATION_TEMPERATURE", "0.2"))
     GENERATION_TOP_P: float = float(os.getenv("GENERATION_TOP_P", "0.8"))
     GENERATION_TOP_K: int = int(os.getenv("GENERATION_TOP_K", "30"))
+    
+    # 多知识库配置
+    KNOWLEDGE_BASES_CONFIG: str = os.getenv("KNOWLEDGE_BASES_CONFIG", "")
 
     class Config:
         env_file = ".env"
