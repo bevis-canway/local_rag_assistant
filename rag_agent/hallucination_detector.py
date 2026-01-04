@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import ollama
 
-from rag_agent.prompts.hallucination_detection_templates import HALLUCINATION_DETECTION_TEMPLATES
+from rag_agent.prompts.hallucination_templates import HALLUCINATION_TEMPLATES
 
 
 @dataclass
@@ -128,7 +128,7 @@ class HallucinationDetector:
         context = self._format_docs_for_checking(retrieved_docs)
         
         # 使用从模板文件导入的提示词
-        prompt = HALLUCINATION_DETECTION_TEMPLATES["semantic_consistency_check"].format(
+        prompt = HALLUCINATION_TEMPLATES["semantic_consistency_check"].format(
             context=context,
             query=query,
             response=response

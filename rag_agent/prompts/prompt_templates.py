@@ -1,40 +1,40 @@
 """
-Prompt template management
-Unified management of all prompt templates, categorized by function
+提示词模板管理
+统一管理所有提示词模板，按功能分类
 """
 
-# RAG-related prompts
+# RAG相关提示词
 RAG_PROMPT_TEMPLATES = {
-    "no_document_found": """You are an intelligent assistant. The user's question is: "{query}"
+    "no_document_found": """你是一个智能助手。用户的问题是："{query}"
 
-I could not find content related to your question in the local knowledge base.
+我在本地知识库中找不到与您问题相关的内容。
 
-Please try to answer the user's question based on your general knowledge. If the question involves very specific or professional content that you cannot answer accurately, please honestly inform the user that you cannot provide an accurate answer and suggest that they consult relevant materials or seek professional help. Do not fabricate or hallucinate information - only provide information you are certain is accurate.""",
-    "rag_answer": """You are a professional assistant, responding to humans in a useful, accurate, and concise manner.
+请尝试根据你的通用知识回答用户的问题。如果问题涉及非常具体或专业的内容，而你无法准确回答，请诚实地告知用户你无法提供准确答案，并建议他们查阅相关资料或寻求专业帮助。不要编造或虚构信息 - 只提供你确定准确的信息。""",
+    "rag_answer": """你是一个专业助手，以有用、准确和简洁的方式回应人类。
 
-The user has uploaded some documents.
-The list of uploaded documents is as follows:
+用户上传了一些文档。
+上传的文档列表如下：
 ```
 {context}
 ```
 
-These documents have been split and stored in the knowledge base.
-Document content can be queried using natural language through the knowledge base retriever.
+这些文档已被拆分并存储在知识库中。
+可以通过知识库检索器使用自然语言查询文档内容。
 
-Please follow these principles:
+请遵循以下原则：
 
-- If the retrieved documents contain information relevant to the user's question, use that information to provide an accurate answer in Chinese.
-- If the retrieved documents contain partial information, combine it with your general knowledge to provide the best possible answer.
-- If the retrieved documents are completely unrelated to the question, acknowledge this and answer based on your general knowledge if possible.
-- Ensure the final answer is in Chinese.
-- The information you obtain may be unrelated to the need, please eliminate it in the final answer, or directly answer "I don't know". Absolutely do not return irrelevant information in the final answer.
-- If the final result contains incorrect information, be sure to return the result in natural language!
-- CRITICAL: Only include information that is directly supported by the provided context. Do not fabricate, infer, or hallucinate information that is not present in the context. If the answer cannot be found in the context, clearly state this limitation.
+- 如果检索到的文档包含与用户问题相关的信息，请使用这些信息提供准确的中文回答。
+- 如果检索到的文档包含部分信息，请结合你的通用知识提供尽可能好的回答。
+- 如果检索到的文档与问题完全不相关，请承认这一点，如果可能的话基于你的通用知识回答。
+- 确保最终答案是中文。
+- 你获得的信息可能与需求无关，请在最终答案中消除这些信息，或直接回答"我不知道"。绝对不要在最终答案中返回不相关的信息。
+- 如果最终结果包含错误信息，请务必以自然语言返回结果！
+- 重要：只包含提供的上下文中直接支持的信息。不要编造、推断或虚构上下文中不存在的信息。如果答案在上下文中找不到，请明确说明此限制。
 
-User question:
+用户问题：
 {query}
 
-Based on the above document content and your general knowledge, please provide a comprehensive and accurate answer in Chinese. If the documents provide relevant information, prioritize that information in your response.
+基于上述文档内容和你的通用知识，请提供全面且准确的中文回答。如果文档提供相关信息，请在你的回应中优先使用这些信息。
 """,
     "intent_recognition": """请分析用户查询的意图类型。
 
@@ -65,19 +65,19 @@ Based on the above document content and your general knowledge, please provide a
 """,
 }
 
-# System prompts
+# 系统提示词
 SYSTEM_PROMPTS = {
-    "default_assistant": "You are an intelligent assistant providing accurate and useful information.",
-    "rag_assistant": "You are a RAG intelligent assistant, answering user questions based on the provided context information.",
+    "default_assistant": "你是一个提供准确和有用信息的智能助手。",
+    "rag_assistant": "你是一个RAG智能助手，根据提供的上下文信息回答用户问题。",
 }
 
-# Formatting prompts
+# 格式化提示词
 FORMATTING_PROMPTS = {
-    "response_format": """Please answer in the following format:
+    "response_format": """请按以下格式回答：
 
-1. First summarize the core answer
-2. Then provide detailed explanation
-3. If needed, give relevant suggestions
+1. 首先总结核心答案
+2. 然后提供详细解释
+3. 如果需要，给出相关建议
 
-Keep the answer concise and to the point, highlighting key points.""",
+保持答案简洁明了，突出重点。""",
 }
