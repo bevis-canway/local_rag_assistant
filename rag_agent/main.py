@@ -1,8 +1,9 @@
 import logging
 import os
 import sys
+import asyncio
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, AsyncGenerator
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
@@ -14,12 +15,13 @@ import tiktoken
 # 使用绝对导入替代相对导入
 from rag_agent.config import Config
 from rag_agent.hallucination_detector import HallucinationDetector, HallucinationCheckResult
-from rag_agent.intent.intent_recognizer import IntentRecognizer, IntentResult  # 添加意图识别导入
+from rag_agent.intent.intent_recognizer import IntentRecognizer, IntentResult  # 添加
 from rag_agent.obsidian_connector import ObsidianConnector
 from rag_agent.prompt_engineer import PromptEngineer
 from rag_agent.prompts.prompt_templates import RAG_PROMPT_TEMPLATES  # 添加此行以导入提示词模板
 from rag_agent.retriever import Retriever
 from rag_agent.vector_store import VectorStore
+from rag_agent.streaming_handler import StreamingHandler, StreamEvent, EventType  # 导入流式响应处理模块
 
 # 配置日志
 logging.basicConfig(
@@ -77,6 +79,9 @@ class RAGAgent:
         
         # 初始化对话历史
         self.chat_history = []
+        
+        # 初始化流式响应处理器
+        self.streaming_handler = StreamingHandler()
 
     def index_obsidian_notes(self):
         """
@@ -324,6 +329,216 @@ class RAGAgent:
         except Exception as e:
             logger.error(f"调用Ollama模型失败: {e}")
             return f"抱歉，处理您的问题时出现错误: {str(e)}"
+
+    async def query_stream(self, user_question: str, chat_history: List[Dict] = None) -> AsyncGenerator[StreamEvent, None]:
+        """
+        异步流式处理用户查询
+        生成流式事件，包括思考过程、参考文档和最终回答
+        """
+        logger.info(f"流式处理查询: {user_question}")
+
+        # 如果没有提供对话历史，则使用实例的对话历史
+        if chat_history is None:
+            chat_history = self.chat_history
+
+        # 1. 进行意图识别
+        intent_result = self.intent_recognizer.recognize_intent(user_question, chat_history)
+        logger.info(f"意图识别结果: {intent_result.intent_type}, 置信度: {intent_result.confidence}")
+
+        # 2. 检查是否需要澄清
+        clarification = self.intent_recognizer.get_clarification_response(intent_result)
+        if clarification and intent_result.intent_type != "history_query":
+            # 发送澄清信息
+            yield StreamEvent(
+                event=EventType.TEXT,
+                content=clarification,
+                cover=False
+            )
+            
+            # 更新对话历史
+            self.chat_history.append({
+                "query": user_question,
+                "response": clarification,
+                "intent": "clarification"
+            })
+            
+            # 限制对话历史长度，避免过长
+            if len(self.chat_history) > 10:  # 保留最近10轮对话
+                self.chat_history = self.chat_history[-10:]
+            
+            return
+
+        # 3. 根据意图类型决定处理方式
+        if intent_result.intent_type == "chitchat":
+            # 对于闲聊类意图，直接使用通用模型回答
+            prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
+        elif intent_result.intent_type == "history_query":
+            # 对于历史查询意图，使用专门的处理方法
+            history_response = self._handle_history_query(user_question, chat_history)
+            if history_response:
+                # 发送历史查询结果
+                yield StreamEvent(
+                    event=EventType.TEXT,
+                    content=history_response,
+                    cover=False
+                )
+                
+                # 更新对话历史
+                self.chat_history.append({
+                    "query": user_question,
+                    "response": history_response,
+                    "intent": "history_query"
+                })
+                
+                # 限制对话历史长度，避免过长
+                if len(self.chat_history) > 10:  # 保留最近10轮对话
+                    self.chat_history = self.chat_history[-10:]
+                
+                return
+            else:
+                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
+        elif intent_result.intent_type in ["knowledge_query", "ambiguous"]:
+            # 对于知识查询或模糊查询（但置信度不够需要澄清的），使用重写后的查询进行检索
+            # 注意：即使置信度较低，我们也尝试检索，因为这可能是一个有效的知识查询
+            query_to_use = intent_result.rewritten_query if intent_result.rewritten_query else user_question
+            
+            # 进行文档检索
+            yield StreamEvent(
+                event=EventType.THINK,
+                content="正在检索相关文档...",
+                cover=False
+            )
+            
+            filtered_results, has_relevant_docs = self.retriever.retrieve_and_filter_by_similarity(query_to_use)
+
+            if has_relevant_docs and intent_result.intent_type == "knowledge_query":
+                # 如果有相关文档且确认是知识查询，格式化并使用RAG提示词
+                context = self.retriever.format_results(filtered_results)
+                prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
+                
+                # 发送参考文档信息
+                yield StreamEvent(
+                    event=EventType.REFERENCE_DOC,
+                    content=f"找到 {len(filtered_results)} 个相关文档",
+                    documents=filtered_results,
+                    cover=False
+                )
+            elif has_relevant_docs and intent_result.intent_type == "ambiguous":
+                # 对于模糊查询，即使置信度较低，如果有相关文档也使用RAG
+                # 这样可以确保用户查询即使被误分类，只要有相关文档仍能获得准确回答
+                context = self.retriever.format_results(filtered_results)
+                prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
+                
+                # 发送参考文档信息
+                yield StreamEvent(
+                    event=EventType.REFERENCE_DOC,
+                    content=f"找到 {len(filtered_results)} 个相关文档",
+                    documents=filtered_results,
+                    cover=False
+                )
+            else:
+                # 如果没有相关文档，使用无文档提示词
+                logger.info("未找到相关文档，使用通用模型回答")
+                prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=query_to_use)
+                
+                # 发送无文档信息
+                yield StreamEvent(
+                    event=EventType.THINK,
+                    content="未找到相关文档，使用通用模型回答",
+                    cover=False
+                )
+        else:
+            # 其他意图类型，使用通用模型回答
+            prompt = RAG_PROMPT_TEMPLATES["no_document_found"].format(query=user_question)
+
+        # 4. 调用Ollama模型进行流式生成
+        try:
+            # 发送开始生成事件
+            yield StreamEvent(
+                event=EventType.THINK,
+                content="正在生成回答...",
+                cover=False
+            )
+            
+            # 调用Ollama模型进行流式生成
+            stream = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: ollama.chat(
+                    model=self.config.OLLAMA_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    options=self.config.get_generation_options(),
+                    stream=True
+                )
+            )
+            
+            full_response = ""
+            hallucination_checked = False
+            
+            # 流式处理模型响应
+            for chunk in stream:
+                if chunk.get('message') and chunk['message'].get('content'):
+                    content = chunk['message']['content']
+                    full_response += content
+                    
+                    # 发送文本内容
+                    yield StreamEvent(
+                        event=EventType.TEXT,
+                        content=content,
+                        cover=False
+                    )
+
+            # 如果是知识查询且有相关文档，进行幻觉检测
+            if intent_result.intent_type in ["knowledge_query", "ambiguous"] and has_relevant_docs:
+                logger.info("进行幻觉检测...")
+                hallucination_result = self.hallucination_detector.detect_hallucinations(
+                    response=full_response,
+                    retrieved_docs=filtered_results,
+                    query=query_to_use
+                )
+                
+                # 如果检测到幻觉且置信度较低，提供警告
+                if not hallucination_result.is_consistent and hallucination_result.confidence_score < 0.7:
+                    logger.warning(f"检测到潜在幻觉，置信度: {hallucination_result.confidence_score}")
+                    warning_msg = "\n\n⚠️ 注意：以下信息基于检索到的文档，但请谨慎验证关键信息的准确性。\n"
+                    
+                    # 发送警告信息
+                    yield StreamEvent(
+                        event=EventType.TEXT,
+                        content=warning_msg,
+                        cover=False
+                    )
+                    
+                    full_response += warning_msg
+                    
+                    # 记录不一致之处
+                    if hallucination_result.inconsistencies:
+                        logger.debug(f"检测到的不一致之处: {hallucination_result.inconsistencies}")
+            
+            # 更新对话历史
+            self.chat_history.append({
+                "query": user_question,
+                "response": full_response,
+                "intent": intent_result.intent_type
+            })
+            
+            # 限制对话历史长度，避免过长
+            if len(self.chat_history) > 10:  # 保留最近10轮对话
+                self.chat_history = self.chat_history[-10:]
+            
+            # 发送完成事件
+            yield StreamEvent(
+                event=EventType.DONE,
+                content="回答生成完成",
+                cover=False
+            )
+            
+        except Exception as e:
+            logger.error(f"调用Ollama模型失败: {e}")
+            yield StreamEvent(
+                event=EventType.ERROR,
+                content=f"抱歉，处理您的问题时出现错误: {str(e)}",
+                cover=False
+            )
 
     def _is_history_query(self, query: str) -> bool:
         """

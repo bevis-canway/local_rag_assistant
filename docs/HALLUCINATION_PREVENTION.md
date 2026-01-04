@@ -115,3 +115,12 @@ GENERATION_TOP_K: int = 30
   - 将`prompt_templates.py`中的所有提示词翻译为中文
   - 提供完整的中文版本，符合本地化要求
 - **效果**: 提升用户体验，符合项目语言规范
+
+### 2026-01-04 流式响应功能
+- **功能**: 实现流式响应功能，支持实时传输AI生成内容
+- **实现**:
+  - 创建`streaming_handler.py`模块，实现多种事件类型（LOADING、TEXT、DONE、ERROR、REFERENCE_DOC、THINK）
+  - 在`RAGAgent`类中添加`query_stream`异步方法
+  - 支持Server-Sent Events (SSE)协议传输流式数据
+  - 在流式输出中集成幻觉检测，对AI生成的每个文本片段进行逐句分析
+- **效果**: 用户可以看到AI的实时思考过程和最终答案，同时保持幻觉检测的实时性
