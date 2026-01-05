@@ -73,11 +73,24 @@ OLLAMA_HOST=http://localhost:11434
 # 向量数据库配置
 VECTOR_DB_PATH=./vector_store
 
+# 多知识库配置（可选）
+DEFAULT_KNOWLEDGE_BASE_PATH=/path/to/your/knowledge/bases
+# KNOWLEDGE_BASES_CONFIG='[{"name":"kb_custom","type":"obsidian","path":"/path/to/custom/vault","description":"Custom Knowledge Base","enabled":true}]'
+
 # 其他配置
 CHUNK_SIZE=512
 CHUNK_OVERLAP=50
 TOP_K=5
 ```
+
+#### 多知识库配置说明
+
+多知识库功能支持通过环境变量配置多个知识库：
+
+- `DEFAULT_KNOWLEDGE_BASE_PATH`：指定包含多个知识库目录的根路径
+- `KNOWLEDGE_BASES_CONFIG`：JSON格式的配置，可定义多个知识库的详细信息
+
+系统会自动扫描 `DEFAULT_KNOWLEDGE_BASE_PATH` 目录下的所有子目录作为独立的知识库。每个子目录被视为一个独立的知识库。
 
 ## 使用自动化构建工具
 
@@ -138,6 +151,20 @@ make dev
 ### 方法4：使用启动脚本
 ```bash
 bash scripts/start_rag_agent.sh
+```
+
+## CLI命令使用
+
+启动小魔仙RAG智能体后，您可以使用以下CLI命令：
+
+```bash
+# 基本命令
+quit / exit          # 退出程序
+reindex             # 重新索引所有启用的知识库
+reindex [kb_name]   # 重新索引指定知识库
+status              # 查看向量库状态
+list                # 查看所有知识库及其状态
+clear               # 清空对话历史
 ```
 
 ## 配置小魔仙模型

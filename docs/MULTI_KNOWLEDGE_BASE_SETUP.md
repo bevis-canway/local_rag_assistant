@@ -94,6 +94,15 @@ python -c "from examples.flexible_multi_kb_setup import index_knowledge_bases; i
 3. 生成综合性的回答
 4. 在流式响应中显示来自不同知识库的参考文档
 
+### CLI命令
+
+在命令行界面中，您可以使用以下多知识库相关命令：
+
+- `reindex` - 重新索引所有启用的知识库
+- `reindex [knowledge_base_name]` - 重新索引指定的知识库
+- `list` - 查看所有知识库及其状态（启用/禁用、文档数量等）
+- `status` - 查看向量库状态
+
 ## 管理知识库
 
 ### 查看所有知识库
@@ -134,6 +143,7 @@ agent.knowledge_base_manager.load_configs("kb_configs.json")
 2. **存储空间**：每个知识库都有独立的向量存储，需要足够的磁盘空间
 3. **性能影响**：知识库数量增加会提高查询时间，但提升回答准确性
 4. **文档格式**：确保知识库中的文档格式受支持（目前主要支持Markdown格式）
+5. **弹性索引**：系统具备错误处理能力，即使某个知识库或文档索引失败，也会继续处理其他知识库
 
 ## 故障排除
 

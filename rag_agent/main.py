@@ -63,8 +63,25 @@ class RAGAgent:
         if config.EMBEDDING_MODEL:
             os.environ.setdefault("EMBEDDING_MODEL", config.EMBEDDING_MODEL)
 
-        # 使用默认知识库的向量存储（保持向后兼容性）
-        self.vector_store = self.knowledge_base_manager.get_vector_store("default")
+        # 获取第一个可用的知识库作为默认知识库（保持向后兼容性）
+        kb_infos = self.knowledge_base_manager.list_knowledge_bases()
+        if kb_infos:
+            default_kb_name = kb_infos[0].name
+        else:
+            # 如果没有自动发现的知识库，添加默认知识库
+            from rag_agent.knowledge_base_manager import KnowledgeBaseConfig
+            default_kb = KnowledgeBaseConfig(
+                name="default",
+                type="obsidian",
+                path=config.OBSIDIAN_VAULT_PATH,
+                description="默认Obsidian知识库",
+                enabled=True,
+                vector_store_path=config.VECTOR_DB_PATH
+            )
+            self.knowledge_base_manager.add_knowledge_base(default_kb)
+            default_kb_name = "default"
+        
+        self.vector_store = self.knowledge_base_manager.get_vector_store(default_kb_name)
         # 使用可配置的相似度阈值，默认为0.3
         similarity_threshold = getattr(config, "SIMILARITY_THRESHOLD", 0.3)
         self.retriever = Retriever(
@@ -72,7 +89,7 @@ class RAGAgent:
             top_k=config.TOP_K,
             similarity_threshold=similarity_threshold,
             config=config,
-            knowledge_base_name="default",  # 指定默认知识库
+            knowledge_base_name=default_kb_name,  # 指定默认知识库
         )
         
         # 初始化意图识别器
@@ -89,43 +106,64 @@ class RAGAgent:
         # 初始化流式响应处理器
         self.streaming_handler = StreamingHandler()
 
-    def index_obsidian_notes(self):
+    def index_obsidian_notes(self, knowledge_base_name: str = "default"):
         """
         索引Obsidian笔记到向量库
         """
-        logger.info("开始索引Obsidian笔记...")
+        logger.info(f"开始索引知识库 {knowledge_base_name} 的笔记...")
+
+        # 获取对应知识库的连接器
+        if knowledge_base_name == "default":
+            connector = self.obsidian_connector
+            vector_store = self.vector_store
+        else:
+            connector = self.knowledge_base_manager.get_connector(knowledge_base_name)
+            vector_store = self.knowledge_base_manager.get_vector_store(knowledge_base_name)
+        
+        if not connector or not vector_store:
+            logger.error(f"无法获取知识库 {knowledge_base_name} 的连接器或向量存储")
+            return
 
         # 获取所有笔记列表
-        notes = self.obsidian_connector.list_notes()
-        logger.info(self.config.OBSIDIAN_VAULT_PATH)
+        notes = connector.list_notes()
+        logger.info(f"知识库 {knowledge_base_name} 路径: {getattr(connector, 'vault_path', 'Unknown')}")
         logger.info(f"找到 {len(notes)} 个笔记")
 
         documents = []
+        failed_notes = []
         for note in notes:
-            content = self.obsidian_connector.get_note_content(note["id"])
-            if content.strip():
-                # 分块处理长文档
-                chunks = self._split_document(content, note["title"], note["id"])
-                for i, chunk in enumerate(chunks):
-                    doc_id = f"{note['id']}_chunk_{i}"
-                    documents.append(
-                        {
-                            "id": doc_id,
-                            "content": chunk,
-                            "metadata": {
-                                "title": note["title"],
-                                "path": note["id"],
-                                "chunk_index": i,
-                            },
-                        }
-                    )
+            try:
+                content = connector.get_note_content(note["id"])
+                if content.strip():
+                    # 分块处理长文档
+                    chunks = self._split_document(content, note["title"], note["id"])
+                    for i, chunk in enumerate(chunks):
+                        doc_id = f"{knowledge_base_name}_{note['id']}_chunk_{i}"
+                        documents.append(
+                            {
+                                "id": doc_id,
+                                "content": chunk,
+                                "metadata": {
+                                    "title": note["title"],
+                                    "path": note["id"],
+                                    "knowledge_base": knowledge_base_name,  # 标识文档来自哪个知识库
+                                    "chunk_index": i,
+                                },
+                            }
+                        )
+            except Exception as e:
+                logger.error(f"处理笔记 {note['id']} 时出错: {e}")
+                failed_notes.append(note['id'])
+        
+        if failed_notes:
+            logger.warning(f"知识库 {knowledge_base_name} 中有 {len(failed_notes)} 个笔记处理失败: {failed_notes}")
 
         # 批量添加到向量库
         if documents:
-            self.vector_store.add_documents(documents)
-            logger.info(f"完成索引，共添加 {len(documents)} 个文档块")
+            vector_store.add_documents(documents)
+            logger.info(f"知识库 {knowledge_base_name} 索引完成，共添加 {len(documents)} 个文档块")
         else:
-            logger.warning("没有找到可索引的文档内容")
+            logger.warning(f"知识库 {knowledge_base_name} 没有找到可索引的文档内容")
 
     def _split_document(self, content: str, title: str, note_id: str) -> List[str]:
         """
@@ -648,8 +686,10 @@ class RAGAgent:
         print(
             "小魔仙RAG智能体已启动！输入 'quit' 或 'exit' 退出，输入 'reindex' 重新索引笔记。"
         )
+        print("输入 'reindex [knowledge_base_name]' 重新索引指定知识库。")
         print("输入 'status' 查看向量库状态。")
         print("输入 'clear' 清空对话历史。")
+        print("输入 'list' 查看所有知识库。")
 
         while True:
             try:
@@ -660,12 +700,58 @@ class RAGAgent:
                     break
                 elif user_input.lower() == "reindex":
                     print("正在重新索引笔记...")
-                    self.index_obsidian_notes()
-                    print("索引完成！")
+                    # 检查是否有知识库名称参数
+                    parts = user_input.split()
+                    if len(parts) > 1:
+                        # 指定特定知识库
+                        kb_name = parts[1]
+                        if self.knowledge_base_manager.get_knowledge_base(kb_name):
+                            self.index_obsidian_notes(kb_name)
+                            print(f"知识库 {kb_name} 索引完成！")
+                        else:
+                            print(f"错误: 知识库 {kb_name} 不存在")
+                            print("可用的知识库:")
+                            for kb_info in self.knowledge_base_manager.list_knowledge_bases():
+                                status = "启用" if kb_info.enabled else "禁用"
+                                print(f"  - {kb_info.name} ({status})")
+                    else:
+                        # 重新索引所有启用的知识库
+                        kb_infos = self.knowledge_base_manager.list_knowledge_bases()
+                        enabled_kbs = [kb for kb in kb_infos if kb.enabled]
+                        if len(enabled_kbs) == 1:
+                            # 如果只有一个知识库，只索引当前默认知识库
+                            self.index_obsidian_notes(self.retriever.knowledge_base_name)
+                            print("索引完成！")
+                        else:
+                            # 如果有多个知识库，索引所有启用的知识库
+                            failed_kbs = []
+                            success_kbs = []
+                            for kb_info in enabled_kbs:
+                                print(f"正在索引知识库: {kb_info.name}")
+                                try:
+                                    self.index_obsidian_notes(kb_info.name)
+                                    success_kbs.append(kb_info.name)
+                                except Exception as e:
+                                    logger.error(f"索引知识库 {kb_info.name} 时出错: {e}")
+                                    failed_kbs.append(kb_info.name)
+                            
+                            print(f"完成索引！成功: {len(success_kbs)}, 失败: {len(failed_kbs)}")
+                            if success_kbs:
+                                print(f"成功索引: {', '.join(success_kbs)}")
+                            if failed_kbs:
+                                print(f"索引失败: {', '.join(failed_kbs)}")
+                                print("请单独重试失败的知识库: reindex [knowledge_base_name]")
                     continue
                 elif user_input.lower() == "status":
                     stats = self.vector_store.collection.count()
                     print(f"向量库状态: 当前有 {stats} 个文档块")
+                    continue
+                elif user_input.lower() == "list":
+                    kb_infos = self.knowledge_base_manager.list_knowledge_bases()
+                    print("可用的知识库:")
+                    for kb_info in kb_infos:
+                        status = "启用" if kb_info.enabled else "禁用"
+                        print(f"  - {kb_info.name} ({status}): {kb_info.path} ({kb_info.indexed_documents_count} 个文档)")
                     continue
                 elif user_input.lower() == "clear":
                     self.chat_history = []
@@ -708,12 +794,63 @@ def main():
         print(f"当前向量库状态: {stats} 个文档块")
         if stats == 0:
             print("检测到向量库为空，正在索引Obsidian笔记...")
-            agent.index_obsidian_notes()
-            print("索引完成！")
+            # 获取所有启用的知识库，如果只有一个则索引默认知识库，否则索引所有知识库
+            kb_infos = agent.knowledge_base_manager.list_knowledge_bases()
+            enabled_kbs = [kb for kb in kb_infos if kb.enabled]
+            
+            if len(enabled_kbs) > 1:
+                # 如果有多个知识库，索引所有启用的知识库
+                failed_kbs = []
+                success_kbs = []
+                for kb_info in enabled_kbs:
+                    print(f"正在索引知识库: {kb_info.name}")
+                    try:
+                        agent.index_obsidian_notes(kb_info.name)
+                        success_kbs.append(kb_info.name)
+                    except Exception as e:
+                        logger.error(f"索引知识库 {kb_info.name} 时出错: {e}")
+                        failed_kbs.append(kb_info.name)
+                
+                print(f"初始索引完成！成功: {len(success_kbs)}, 失败: {len(failed_kbs)}")
+                if success_kbs:
+                    print(f"成功索引: {', '.join(success_kbs)}")
+                if failed_kbs:
+                    print(f"索引失败: {', '.join(failed_kbs)}")
+            else:
+                # 只有一个知识库，索引默认知识库
+                agent.index_obsidian_notes(agent.retriever.knowledge_base_name)
+            print("初始索引完成！")
     except Exception as e:
         print(f"检查向量库状态时出错: {e}")
         print("正在索引Obsidian笔记...")
-        agent.index_obsidian_notes()
+        try:
+            # 同样处理多个知识库
+            kb_infos = agent.knowledge_base_manager.list_knowledge_bases()
+            enabled_kbs = [kb for kb in kb_infos if kb.enabled]
+            
+            if len(enabled_kbs) > 1:
+                # 如果有多个知识库，索引所有启用的知识库
+                failed_kbs = []
+                success_kbs = []
+                for kb_info in enabled_kbs:
+                    print(f"正在索引知识库: {kb_info.name}")
+                    try:
+                        agent.index_obsidian_notes(kb_info.name)
+                        success_kbs.append(kb_info.name)
+                    except Exception as e_inner:
+                        logger.error(f"索引知识库 {kb_info.name} 时出错: {e_inner}")
+                        failed_kbs.append(kb_info.name)
+                
+                print(f"初始索引完成！成功: {len(success_kbs)}, 失败: {len(failed_kbs)}")
+                if success_kbs:
+                    print(f"成功索引: {', '.join(success_kbs)}")
+                if failed_kbs:
+                    print(f"索引失败: {', '.join(failed_kbs)}")
+            else:
+                # 只有一个知识库，索引默认知识库
+                agent.index_obsidian_notes(agent.retriever.knowledge_base_name)
+        except Exception as e2:
+            logger.error(f"索引过程出错: {e2}")
         print("索引完成！")
 
     # 运行命令行界面

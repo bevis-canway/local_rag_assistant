@@ -196,12 +196,23 @@ class KnowledgeBaseManager:
         kb_infos = []
         for name, config in self.knowledge_bases.items():
             # 获取向量存储的文档计数
-            doc_count = 0
+            indexed_doc_count = 0
             if name in self.vector_stores:
                 try:
-                    doc_count = self.vector_stores[name].collection.count()
+                    indexed_doc_count = self.vector_stores[name].collection.count()
                 except:
                     pass  # 如果向量存储未初始化，则计数为0
+            
+            # 获取知识库中实际的文档数量
+            actual_doc_count = 0
+            if config.type == "obsidian" and os.path.exists(config.path):
+                try:
+                    # 计算知识库路径下实际的.md文件数量
+                    import glob
+                    md_files = glob.glob(os.path.join(config.path, "**/*.md"), recursive=True)
+                    actual_doc_count = len(md_files)
+                except Exception as e:
+                    self.logger.error(f"计算知识库 {name} 的实际文档数时出错: {e}")
             
             kb_info = KnowledgeBaseInfo(
                 name=name,
@@ -209,7 +220,7 @@ class KnowledgeBaseManager:
                 path=config.path,
                 description=config.description,
                 enabled=config.enabled,
-                indexed_documents_count=doc_count
+                indexed_documents_count=actual_doc_count  # 使用实际文档数而非索引文档数
             )
             kb_infos.append(kb_info)
         
