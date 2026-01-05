@@ -88,7 +88,7 @@ class KnowledgeBaseManager:
                 item_path = os.path.join(default_path, item)
                 if os.path.isdir(item_path):
                     # 使用目录名作为知识库名
-                    kb_name = item.lower().replace(' ', '_').replace('-', '_')
+                    kb_name = f"kb_{item.lower().replace(' ', '_').replace('-', '_')}"
                     
                     kb_config = KnowledgeBaseConfig(
                         name=kb_name,
@@ -99,8 +99,10 @@ class KnowledgeBaseManager:
                         vector_store_path=f"./vector_store/{kb_name}"
                     )
                     
-                    self.knowledge_bases[kb_name] = kb_config
-                    self.logger.info(f"自动发现知识库: {kb_name} at {item_path}")
+                    # 避免重复添加
+                    if kb_name not in self.knowledge_bases:
+                        self.knowledge_bases[kb_name] = kb_config
+                        self.logger.info(f"自动发现知识库: {kb_name} at {item_path}")
         
         # 如果仍然没有找到知识库，添加传统默认知识库（保持向后兼容）
         if not self.knowledge_bases:
