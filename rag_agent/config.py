@@ -44,6 +44,7 @@ class Config(BaseModel):
     
     # 多知识库配置
     KNOWLEDGE_BASES_CONFIG: str = os.getenv("KNOWLEDGE_BASES_CONFIG", "")
+    DEFAULT_KNOWLEDGE_BASE_PATH: str = os.getenv("DEFAULT_KNOWLEDGE_BASE_PATH", "/Users/xiejindong/Desktop/multi_knowledge_base")
 
     class Config:
         env_file = ".env"

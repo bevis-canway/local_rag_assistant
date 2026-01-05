@@ -199,6 +199,10 @@ make purge         # 完全清理（包括虚拟环境）
 - [待办功能列表](roadmap/todo_features.md) - 查看待实现的功能和优化
 - [产品路标总览](roadmap/roadmap_overview.md) - 查看长期发展规划
 
+## 文档
+
+- [多知识库支持](docs/MULTI_KNOWLEDGE_BASE_SETUP.md) - 查看多知识库配置和使用方法
+
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request 来改进项目。

@@ -8,13 +8,14 @@
 
 ### 1. 自动配置（推荐）
 
-使用提供的配置脚本快速配置位于 `/Users/xiejindong/Desktop/multi_knowledge_base` 的知识库：
+使用提供的配置脚本快速配置知识库：
 
 ```bash
-python examples/quick_multi_kb_setup.py
+python examples/flexible_multi_kb_setup.py
 ```
 
 此脚本会：
+- 从配置文件或环境变量读取知识库路径
 - 扫描指定目录下的所有子目录
 - 为每个子目录创建独立的知识库配置
 - 保存配置以便后续使用
@@ -81,7 +82,7 @@ agent.knowledge_base_manager.add_knowledge_base(kb_config)
 ollama serve
 
 # 然后运行索引
-python -c "from examples.quick_multi_kb_setup import index_knowledge_bases; index_knowledge_bases()"
+python -c "from examples.flexible_multi_kb_setup import index_knowledge_bases; index_knowledge_bases()"
 ```
 
 ## 使用多知识库

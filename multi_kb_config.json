@@ -9,21 +9,21 @@
     "metadata": null
   },
   {
-    "name": "kb_rag_local_km_tset",
+    "name": "rag_local_km_tset",
     "type": "obsidian",
     "path": "/Users/xiejindong/Desktop/multi_knowledge_base/rag_local_km_tset",
     "description": "rag_local_km_tset 知识库",
     "enabled": true,
-    "vector_store_path": "./vector_store/kb_rag_local_km_tset",
+    "vector_store_path": "./vector_store/rag_local_km_tset",
     "metadata": null
   },
   {
-    "name": "kb_rag_local_km_tset2",
+    "name": "rag_local_km_tset2",
     "type": "obsidian",
     "path": "/Users/xiejindong/Desktop/multi_knowledge_base/rag_local_km_tset2",
     "description": "rag_local_km_tset2 知识库",
     "enabled": true,
-    "vector_store_path": "./vector_store/kb_rag_local_km_tset2",
+    "vector_store_path": "./vector_store/rag_local_km_tset2",
     "metadata": null
   }
 ]

@@ -74,7 +74,35 @@ class KnowledgeBaseManager:
             except json.JSONDecodeError as e:
                 self.logger.error(f"解析知识库配置失败: {e}")
         
-        # 如果没有配置，添加默认知识库（保持向后兼容）
+        # 如果没有配置，尝试从默认路径自动发现知识库
+        if not self.knowledge_bases:
+            self._discover_knowledge_bases_from_default_path()
+    
+    def _discover_knowledge_bases_from_default_path(self):
+        """从默认路径自动发现知识库"""
+        default_path = getattr(self.config, 'DEFAULT_KNOWLEDGE_BASE_PATH', self.config.OBSIDIAN_VAULT_PATH)
+        
+        if os.path.exists(default_path):
+            # 扫描默认路径下的所有子目录作为知识库
+            for item in os.listdir(default_path):
+                item_path = os.path.join(default_path, item)
+                if os.path.isdir(item_path):
+                    # 使用目录名作为知识库名
+                    kb_name = item.lower().replace(' ', '_').replace('-', '_')
+                    
+                    kb_config = KnowledgeBaseConfig(
+                        name=kb_name,
+                        type="obsidian",
+                        path=item_path,
+                        description=f"{item} 知识库",
+                        enabled=True,
+                        vector_store_path=f"./vector_store/{kb_name}"
+                    )
+                    
+                    self.knowledge_bases[kb_name] = kb_config
+                    self.logger.info(f"自动发现知识库: {kb_name} at {item_path}")
+        
+        # 如果仍然没有找到知识库，添加传统默认知识库（保持向后兼容）
         if not self.knowledge_bases:
             default_kb = KnowledgeBaseConfig(
                 name="default",
