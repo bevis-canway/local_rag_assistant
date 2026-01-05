@@ -312,13 +312,9 @@ class RAGAgent:
             # 进行文档检索 - 现在支持跨多个知识库检索
             filtered_results, has_relevant_docs = self._retrieve_from_all_knowledge_bases(query_to_use)
 
-            if has_relevant_docs and intent_result.intent_type == "knowledge_query":
-                # 如果有相关文档且确认是知识查询，格式化并使用RAG提示词
-                context = self.retriever.format_results(filtered_results)
-                prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
-            elif has_relevant_docs and intent_result.intent_type == "ambiguous":
-                # 对于模糊查询，即使置信度较低，如果有相关文档也使用RAG
-                # 这样可以确保用户查询即使被误分类，只要有相关文档仍能获得准确回答
+            if has_relevant_docs:
+                # 如果有相关文档，格式化并使用RAG提示词
+                # 无论查询类型是knowledge_query还是ambiguous，只要有相关文档就使用RAG
                 context = self.retriever.format_results(filtered_results)
                 prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
             else:
@@ -500,21 +496,9 @@ class RAGAgent:
             
             filtered_results, has_relevant_docs = self._retrieve_from_all_knowledge_bases(query_to_use)
 
-            if has_relevant_docs and intent_result.intent_type == "knowledge_query":
-                # 如果有相关文档且确认是知识查询，格式化并使用RAG提示词
-                context = self.retriever.format_results(filtered_results)
-                prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
-                
-                # 发送参考文档信息
-                yield StreamEvent(
-                    event=EventType.REFERENCE_DOC,
-                    content=f"找到 {len(filtered_results)} 个相关文档",
-                    documents=filtered_results,
-                    cover=False
-                )
-            elif has_relevant_docs and intent_result.intent_type == "ambiguous":
-                # 对于模糊查询，即使置信度较低，如果有相关文档也使用RAG
-                # 这样可以确保用户查询即使被误分类，只要有相关文档仍能获得准确回答
+            if has_relevant_docs:
+                # 如果有相关文档，格式化并使用RAG提示词
+                # 无论查询类型是knowledge_query还是ambiguous，只要有相关文档就使用RAG
                 context = self.retriever.format_results(filtered_results)
                 prompt = self.prompt_engineer.build_rag_prompt(query_to_use, context)
                 
